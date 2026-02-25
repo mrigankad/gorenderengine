@@ -2,6 +2,7 @@ package vulkan
 
 /*
 #include <vulkan/vulkan.h>
+#include <stdlib.h>
 
 typedef struct {
     VkSurfaceCapabilitiesKHR capabilities;
@@ -13,13 +14,13 @@ typedef struct {
 
 void querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface, SwapChainSupportDetails* details) {
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details->capabilities);
-    
+
     vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &details->formatCount, NULL);
     if (details->formatCount != 0) {
         details->formats = (VkSurfaceFormatKHR*)malloc(details->formatCount * sizeof(VkSurfaceFormatKHR));
         vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &details->formatCount, details->formats);
     }
-    
+
     vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &details->presentModeCount, NULL);
     if (details->presentModeCount != 0) {
         details->presentModes = (VkPresentModeKHR*)malloc(details->presentModeCount * sizeof(VkPresentModeKHR));
@@ -34,7 +35,7 @@ void freeSwapChainSupportDetails(SwapChainSupportDetails* details) {
 
 VkSurfaceFormatKHR chooseSwapSurfaceFormat(const VkSurfaceFormatKHR* availableFormats, uint32_t count) {
     for (uint32_t i = 0; i < count; i++) {
-        if (availableFormats[i].format == VK_FORMAT_B8G8R8A8_SRGB && 
+        if (availableFormats[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
             availableFormats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             return availableFormats[i];
         }
@@ -56,19 +57,19 @@ VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR* capabilities, uint32
         return capabilities->currentExtent;
     } else {
         VkExtent2D actualExtent = {width, height};
-        
+
         if (actualExtent.width < capabilities->minImageExtent.width) {
             actualExtent.width = capabilities->minImageExtent.width;
         } else if (actualExtent.width > capabilities->maxImageExtent.width) {
             actualExtent.width = capabilities->maxImageExtent.width;
         }
-        
+
         if (actualExtent.height < capabilities->minImageExtent.height) {
             actualExtent.height = capabilities->minImageExtent.height;
         } else if (actualExtent.height > capabilities->maxImageExtent.height) {
             actualExtent.height = capabilities->maxImageExtent.height;
         }
-        
+
         return actualExtent;
     }
 }
@@ -88,39 +89,44 @@ type SwapChain struct {
 	ColorSpace   C.VkColorSpaceKHR
 	PresentMode  C.VkPresentModeKHR
 	Extent       C.VkExtent2D
+	Width        uint32
+	Height       uint32
 	ImageCount   uint32
 }
 
 type SwapChainConfig struct {
-	Width         uint32
-	Height        uint32
-	VSync         bool
-	TripleBuffer  bool
+	Width        uint32
+	Height       uint32
+	VSync        bool
+	TripleBuffer bool
 }
 
 func CreateSwapChain(device *Device, surface C.VkSurfaceKHR, config SwapChainConfig) (*SwapChain, error) {
+	fmt.Println("  Querying swapchain support...")
 	details := C.SwapChainSupportDetails{}
 	C.querySwapChainSupport(device.PhysicalDevice, surface, &details)
 	defer C.freeSwapChainSupportDetails(&details)
-	
+
 	if details.formatCount == 0 || details.presentModeCount == 0 {
 		return nil, fmt.Errorf("swapchain does not have available formats or present modes")
 	}
-	
+	fmt.Printf("  Formats: %d, Present modes: %d\n", details.formatCount, details.presentModeCount)
+
 	// Choose settings
+	fmt.Println("  Choosing surface format...")
 	surfaceFormat := C.chooseSwapSurfaceFormat(details.formats, details.formatCount)
-	presentMode := C.VK_PRESENT_MODE_FIFO_KHR
+	presentMode := C.VkPresentModeKHR(C.VK_PRESENT_MODE_FIFO_KHR)
 	if !config.VSync {
 		presentMode = C.chooseSwapPresentMode(details.presentModes, details.presentModeCount)
 	}
 	extent := C.chooseSwapExtent(&details.capabilities, C.uint32_t(config.Width), C.uint32_t(config.Height))
-	
+
 	// Determine image count
 	imageCount := details.capabilities.minImageCount + 1
 	if details.capabilities.maxImageCount > 0 && imageCount > details.capabilities.maxImageCount {
 		imageCount = details.capabilities.maxImageCount
 	}
-	
+
 	// Create swapchain
 	createInfo := C.VkSwapchainCreateInfoKHR{
 		sType:            C.VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -137,7 +143,7 @@ func CreateSwapChain(device *Device, surface C.VkSurfaceKHR, config SwapChainCon
 		clipped:          C.VK_TRUE,
 		oldSwapchain:     nil,
 	}
-	
+
 	queueFamilyIndices := []C.uint32_t{C.uint32_t(device.GraphicsFamily), C.uint32_t(device.PresentFamily)}
 	if device.GraphicsFamily != device.PresentFamily {
 		createInfo.imageSharingMode = C.VK_SHARING_MODE_CONCURRENT
@@ -146,26 +152,28 @@ func CreateSwapChain(device *Device, surface C.VkSurfaceKHR, config SwapChainCon
 	} else {
 		createInfo.imageSharingMode = C.VK_SHARING_MODE_EXCLUSIVE
 	}
-	
+
 	sc := &SwapChain{
 		Format:      surfaceFormat.format,
 		ColorSpace:  surfaceFormat.colorSpace,
 		PresentMode: presentMode,
 		Extent:      extent,
+		Width:       uint32(extent.width),
+		Height:      uint32(extent.height),
 		ImageCount:  uint32(imageCount),
 	}
-	
+
 	result := C.vkCreateSwapchainKHR(device.Device, &createInfo, nil, &sc.Handle)
 	if result != C.VK_SUCCESS {
 		return nil, fmt.Errorf("failed to create swapchain: %d", result)
 	}
-	
+
 	// Get swapchain images
 	var actualImageCount C.uint32_t
 	C.vkGetSwapchainImagesKHR(device.Device, sc.Handle, &actualImageCount, nil)
 	sc.Images = make([]C.VkImage, actualImageCount)
 	C.vkGetSwapchainImagesKHR(device.Device, sc.Handle, &actualImageCount, &sc.Images[0])
-	
+
 	// Create image views
 	sc.ImageViews = make([]C.VkImageView, len(sc.Images))
 	for i, image := range sc.Images {
@@ -182,41 +190,56 @@ func CreateSwapChain(device *Device, surface C.VkSurfaceKHR, config SwapChainCon
 				layerCount:     1,
 			},
 		}
-		
+
 		result = C.vkCreateImageView(device.Device, &viewInfo, nil, &sc.ImageViews[i])
 		if result != C.VK_SUCCESS {
 			return nil, fmt.Errorf("failed to create image view: %d", result)
 		}
 	}
-	
+
 	return sc, nil
 }
 
 func (sc *SwapChain) CreateFramebuffers(device *Device, renderPass C.VkRenderPass, depthImageView C.VkImageView) error {
+	fmt.Printf("CreateFramebuffers: creating %d framebuffers\n", len(sc.ImageViews))
 	sc.Framebuffers = make([]C.VkFramebuffer, len(sc.ImageViews))
-	
+
 	for i, imageView := range sc.ImageViews {
-		attachments := []C.VkImageView{imageView}
+		fmt.Printf("  Creating framebuffer %d...\n", i)
+		// Count attachments
+		attachmentCount := 1
 		if depthImageView != nil {
-			attachments = append(attachments, depthImageView)
+			attachmentCount = 2
 		}
 		
-		framebufferInfo := C.VkFramebufferCreateInfo{
-			sType:           C.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-			renderPass:      renderPass,
-			attachmentCount: C.uint32_t(len(attachments)),
-			pAttachments:    &attachments[0],
-			width:           sc.Extent.width,
-			height:          sc.Extent.height,
-			layers:          1,
+		// Allocate attachments in C memory
+		attachments := C.malloc(C.size_t(attachmentCount) * C.size_t(unsafe.Sizeof(C.VkImageView(nil))))
+		*(*C.VkImageView)(attachments) = imageView
+		if depthImageView != nil {
+			*(*C.VkImageView)(unsafe.Pointer(uintptr(attachments) + unsafe.Sizeof(C.VkImageView(nil)))) = depthImageView
 		}
 		
-		result := C.vkCreateFramebuffer(device.Device, &framebufferInfo, nil, &sc.Framebuffers[i])
+		// Allocate framebuffer info in C memory
+		framebufferInfo := (*C.VkFramebufferCreateInfo)(C.malloc(C.size_t(unsafe.Sizeof(C.VkFramebufferCreateInfo{}))))
+		framebufferInfo.sType = C.VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO
+		framebufferInfo.renderPass = renderPass
+		framebufferInfo.attachmentCount = C.uint32_t(attachmentCount)
+		framebufferInfo.pAttachments = (*C.VkImageView)(attachments)
+		framebufferInfo.width = sc.Extent.width
+		framebufferInfo.height = sc.Extent.height
+		framebufferInfo.layers = 1
+
+		result := C.vkCreateFramebuffer(device.Device, framebufferInfo, nil, &sc.Framebuffers[i])
+		
+		// Free C memory
+		C.free(unsafe.Pointer(framebufferInfo))
+		C.free(attachments)
 		if result != C.VK_SUCCESS {
 			return fmt.Errorf("failed to create framebuffer: %d", result)
 		}
+		fmt.Printf("  Framebuffer %d created\n", i)
 	}
-	
+
 	return nil
 }
 
@@ -233,12 +256,12 @@ func (sc *SwapChain) Destroy(device *Device) {
 func (sc *SwapChain) AcquireNextImage(device *Device, semaphore C.VkSemaphore, timeout uint64) (uint32, error) {
 	var imageIndex C.uint32_t
 	result := C.vkAcquireNextImageKHR(device.Device, sc.Handle, C.uint64_t(timeout), semaphore, nil, &imageIndex)
-	
+
 	if result == C.VK_ERROR_OUT_OF_DATE_KHR {
 		return uint32(imageIndex), fmt.Errorf("swapchain out of date")
 	} else if result != C.VK_SUCCESS && result != C.VK_SUBOPTIMAL_KHR {
 		return uint32(imageIndex), fmt.Errorf("failed to acquire swapchain image: %d", result)
 	}
-	
+
 	return uint32(imageIndex), nil
 }

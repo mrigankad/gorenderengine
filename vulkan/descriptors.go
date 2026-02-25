@@ -2,6 +2,8 @@ package vulkan
 
 /*
 #include <vulkan/vulkan.h>
+#include <stdlib.h>
+#include <string.h>
 */
 import "C"
 import (
@@ -18,35 +20,51 @@ type DescriptorSet struct {
 }
 
 func CreateDescriptorSetLayout(device *Device, bindings []C.VkDescriptorSetLayoutBinding) (C.VkDescriptorSetLayout, error) {
-	layoutInfo := C.VkDescriptorSetLayoutCreateInfo{
-		sType:        C.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		bindingCount: C.uint32_t(len(bindings)),
-		pBindings:    &bindings[0],
-	}
+	// Allocate bindings in C memory
+	bindingsSize := C.size_t(len(bindings)) * C.size_t(unsafe.Sizeof(C.VkDescriptorSetLayoutBinding{}))
+	cBindings := C.malloc(bindingsSize)
+	defer C.free(cBindings)
+	C.memcpy(cBindings, unsafe.Pointer(&bindings[0]), bindingsSize)
 	
+	// Allocate layout info in C memory
+	layoutInfo := (*C.VkDescriptorSetLayoutCreateInfo)(C.malloc(C.size_t(unsafe.Sizeof(C.VkDescriptorSetLayoutCreateInfo{}))))
+	defer C.free(unsafe.Pointer(layoutInfo))
+	C.memset(unsafe.Pointer(layoutInfo), 0, C.size_t(unsafe.Sizeof(C.VkDescriptorSetLayoutCreateInfo{})))
+	layoutInfo.sType = C.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO
+	layoutInfo.bindingCount = C.uint32_t(len(bindings))
+	layoutInfo.pBindings = (*C.VkDescriptorSetLayoutBinding)(cBindings)
+
 	var layout C.VkDescriptorSetLayout
-	result := C.vkCreateDescriptorSetLayout(device.Device, &layoutInfo, nil, &layout)
+	result := C.vkCreateDescriptorSetLayout(device.Device, layoutInfo, nil, &layout)
 	if result != C.VK_SUCCESS {
 		return nil, fmt.Errorf("failed to create descriptor set layout: %d", result)
 	}
-	
+
 	return layout, nil
 }
 
 func CreateDescriptorPool(device *Device, poolSizes []C.VkDescriptorPoolSize, maxSets uint32) (*DescriptorPool, error) {
-	poolInfo := C.VkDescriptorPoolCreateInfo{
-		sType:         C.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		poolSizeCount: C.uint32_t(len(poolSizes)),
-		pPoolSizes:    &poolSizes[0],
-		maxSets:       C.uint32_t(maxSets),
-	}
+	// Allocate pool sizes in C memory
+	poolSizesSize := C.size_t(len(poolSizes)) * C.size_t(unsafe.Sizeof(C.VkDescriptorPoolSize{}))
+	cPoolSizes := C.malloc(poolSizesSize)
+	defer C.free(cPoolSizes)
+	C.memcpy(cPoolSizes, unsafe.Pointer(&poolSizes[0]), poolSizesSize)
 	
+	// Allocate pool info in C memory
+	poolInfo := (*C.VkDescriptorPoolCreateInfo)(C.malloc(C.size_t(unsafe.Sizeof(C.VkDescriptorPoolCreateInfo{}))))
+	defer C.free(unsafe.Pointer(poolInfo))
+	C.memset(unsafe.Pointer(poolInfo), 0, C.size_t(unsafe.Sizeof(C.VkDescriptorPoolCreateInfo{})))
+	poolInfo.sType = C.VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO
+	poolInfo.poolSizeCount = C.uint32_t(len(poolSizes))
+	poolInfo.pPoolSizes = (*C.VkDescriptorPoolSize)(cPoolSizes)
+	poolInfo.maxSets = C.uint32_t(maxSets)
+
 	pool := &DescriptorPool{}
-	result := C.vkCreateDescriptorPool(device.Device, &poolInfo, nil, &pool.Handle)
+	result := C.vkCreateDescriptorPool(device.Device, poolInfo, nil, &pool.Handle)
 	if result != C.VK_SUCCESS {
 		return nil, fmt.Errorf("failed to create descriptor pool: %d", result)
 	}
-	
+
 	return pool, nil
 }
 
@@ -55,91 +73,107 @@ func (p *DescriptorPool) Destroy(device *Device) {
 }
 
 func (p *DescriptorPool) AllocateDescriptorSets(device *Device, layouts []C.VkDescriptorSetLayout) ([]DescriptorSet, error) {
-	allocInfo := C.VkDescriptorSetAllocateInfo{
-		sType:              C.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		descriptorPool:     p.Handle,
-		descriptorSetCount: C.uint32_t(len(layouts)),
-		pSetLayouts:        &layouts[0],
-	}
+	// Allocate layouts in C memory
+	layoutsSize := C.size_t(len(layouts)) * C.size_t(unsafe.Sizeof(C.VkDescriptorSetLayout(nil)))
+	cLayouts := C.malloc(layoutsSize)
+	defer C.free(cLayouts)
+	C.memcpy(cLayouts, unsafe.Pointer(&layouts[0]), layoutsSize)
 	
+	// Allocate alloc info in C memory
+	allocInfo := (*C.VkDescriptorSetAllocateInfo)(C.malloc(C.size_t(unsafe.Sizeof(C.VkDescriptorSetAllocateInfo{}))))
+	defer C.free(unsafe.Pointer(allocInfo))
+	C.memset(unsafe.Pointer(allocInfo), 0, C.size_t(unsafe.Sizeof(C.VkDescriptorSetAllocateInfo{})))
+	allocInfo.sType = C.VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO
+	allocInfo.descriptorPool = p.Handle
+	allocInfo.descriptorSetCount = C.uint32_t(len(layouts))
+	allocInfo.pSetLayouts = (*C.VkDescriptorSetLayout)(cLayouts)
+
 	sets := make([]DescriptorSet, len(layouts))
 	handles := make([]C.VkDescriptorSet, len(layouts))
-	
-	result := C.vkAllocateDescriptorSets(device.Device, &allocInfo, &handles[0])
+
+	result := C.vkAllocateDescriptorSets(device.Device, allocInfo, &handles[0])
 	if result != C.VK_SUCCESS {
 		return nil, fmt.Errorf("failed to allocate descriptor sets: %d", result)
 	}
-	
+
 	for i := range sets {
 		sets[i].Handle = handles[i]
 	}
-	
+
 	return sets, nil
 }
 
 func UpdateDescriptorSetBuffer(device *Device, set C.VkDescriptorSet, binding uint32, buffer C.VkBuffer, offset, range_ uint64) {
-	bufferInfo := C.VkDescriptorBufferInfo{
-		buffer: buffer,
-		offset: C.VkDeviceSize(offset),
-		range:  C.VkDeviceSize(range_),
-	}
-	
-	descriptorWrite := C.VkWriteDescriptorSet{
-		sType:           C.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		dstSet:          set,
-		dstBinding:      C.uint32_t(binding),
-		dstArrayElement: 0,
-		descriptorType:  C.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		descriptorCount: 1,
-		pBufferInfo:     &bufferInfo,
-	}
-	
-	C.vkUpdateDescriptorSets(device.Device, 1, &descriptorWrite, 0, nil)
+	// Allocate buffer info in C memory
+	bufferInfo := (*C.VkDescriptorBufferInfo)(C.malloc(C.size_t(unsafe.Sizeof(C.VkDescriptorBufferInfo{}))))
+	defer C.free(unsafe.Pointer(bufferInfo))
+	bufferInfo.buffer = buffer
+	bufferInfo.offset = C.VkDeviceSize(offset)
+	bufferInfo._range = C.VkDeviceSize(range_)
+
+	// Allocate write info in C memory
+	descriptorWrite := (*C.VkWriteDescriptorSet)(C.malloc(C.size_t(unsafe.Sizeof(C.VkWriteDescriptorSet{}))))
+	defer C.free(unsafe.Pointer(descriptorWrite))
+	C.memset(unsafe.Pointer(descriptorWrite), 0, C.size_t(unsafe.Sizeof(C.VkWriteDescriptorSet{})))
+	descriptorWrite.sType = C.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET
+	descriptorWrite.dstSet = set
+	descriptorWrite.dstBinding = C.uint32_t(binding)
+	descriptorWrite.dstArrayElement = 0
+	descriptorWrite.descriptorType = C.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+	descriptorWrite.descriptorCount = 1
+	descriptorWrite.pBufferInfo = bufferInfo
+
+	C.vkUpdateDescriptorSets(device.Device, 1, descriptorWrite, 0, nil)
 }
 
 func UpdateDescriptorSetImage(device *Device, set C.VkDescriptorSet, binding uint32, imageView C.VkImageView, sampler C.VkSampler) {
-	imageInfo := C.VkDescriptorImageInfo{
-		sampler:     sampler,
-		imageView:   imageView,
-		imageLayout: C.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-	}
-	
-	descriptorWrite := C.VkWriteDescriptorSet{
-		sType:           C.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		dstSet:          set,
-		dstBinding:      C.uint32_t(binding),
-		dstArrayElement: 0,
-		descriptorType:  C.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		descriptorCount: 1,
-		pImageInfo:      &imageInfo,
-	}
-	
-	C.vkUpdateDescriptorSets(device.Device, 1, &descriptorWrite, 0, nil)
+	// Allocate image info in C memory
+	imageInfo := (*C.VkDescriptorImageInfo)(C.malloc(C.size_t(unsafe.Sizeof(C.VkDescriptorImageInfo{}))))
+	defer C.free(unsafe.Pointer(imageInfo))
+	imageInfo.sampler = sampler
+	imageInfo.imageView = imageView
+	imageInfo.imageLayout = C.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+
+	// Allocate write info in C memory
+	descriptorWrite := (*C.VkWriteDescriptorSet)(C.malloc(C.size_t(unsafe.Sizeof(C.VkWriteDescriptorSet{}))))
+	defer C.free(unsafe.Pointer(descriptorWrite))
+	C.memset(unsafe.Pointer(descriptorWrite), 0, C.size_t(unsafe.Sizeof(C.VkWriteDescriptorSet{})))
+	descriptorWrite.sType = C.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET
+	descriptorWrite.dstSet = set
+	descriptorWrite.dstBinding = C.uint32_t(binding)
+	descriptorWrite.dstArrayElement = 0
+	descriptorWrite.descriptorType = C.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
+	descriptorWrite.descriptorCount = 1
+	descriptorWrite.pImageInfo = imageInfo
+
+	C.vkUpdateDescriptorSets(device.Device, 1, descriptorWrite, 0, nil)
 }
 
 func CreateSampler(device *Device, magFilter, minFilter C.VkFilter, addressMode C.VkSamplerAddressMode, anisotropy float32) (C.VkSampler, error) {
-	samplerInfo := C.VkSamplerCreateInfo{
-		sType:                   C.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-		magFilter:               magFilter,
-		minFilter:               minFilter,
-		addressModeU:            addressMode,
-		addressModeV:            addressMode,
-		addressModeW:            addressMode,
-		anisotropyEnable:        C.VK_TRUE,
-		maxAnisotropy:           C.float(anisotropy),
-		borderColor:             C.VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-		unnormalizedCoordinates: C.VK_FALSE,
-		compareEnable:           C.VK_FALSE,
-		compareOp:               C.VK_COMPARE_OP_ALWAYS,
-		mipmapMode:              C.VK_SAMPLER_MIPMAP_MODE_LINEAR,
-	}
-	
+	// Allocate sampler info in C memory
+	samplerInfo := (*C.VkSamplerCreateInfo)(C.malloc(C.size_t(unsafe.Sizeof(C.VkSamplerCreateInfo{}))))
+	defer C.free(unsafe.Pointer(samplerInfo))
+	C.memset(unsafe.Pointer(samplerInfo), 0, C.size_t(unsafe.Sizeof(C.VkSamplerCreateInfo{})))
+	samplerInfo.sType = C.VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO
+	samplerInfo.magFilter = magFilter
+	samplerInfo.minFilter = minFilter
+	samplerInfo.addressModeU = addressMode
+	samplerInfo.addressModeV = addressMode
+	samplerInfo.addressModeW = addressMode
+	samplerInfo.anisotropyEnable = C.VK_TRUE
+	samplerInfo.maxAnisotropy = C.float(anisotropy)
+	samplerInfo.borderColor = C.VK_BORDER_COLOR_INT_OPAQUE_BLACK
+	samplerInfo.unnormalizedCoordinates = C.VK_FALSE
+	samplerInfo.compareEnable = C.VK_FALSE
+	samplerInfo.compareOp = C.VK_COMPARE_OP_ALWAYS
+	samplerInfo.mipmapMode = C.VK_SAMPLER_MIPMAP_MODE_LINEAR
+
 	var sampler C.VkSampler
-	result := C.vkCreateSampler(device.Device, &samplerInfo, nil, &sampler)
+	result := C.vkCreateSampler(device.Device, samplerInfo, nil, &sampler)
 	if result != C.VK_SUCCESS {
 		return nil, fmt.Errorf("failed to create texture sampler: %d", result)
 	}
-	
+
 	return sampler, nil
 }
 

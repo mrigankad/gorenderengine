@@ -3,6 +3,7 @@ package vulkan
 /*
 #include <vulkan/vulkan.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct {
@@ -19,28 +20,28 @@ typedef struct {
 void findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface, DeviceInfo* info) {
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, NULL);
-    
+
     VkQueueFamilyProperties* queueFamilies = (VkQueueFamilyProperties*)malloc(queueFamilyCount * sizeof(VkQueueFamilyProperties));
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies);
-    
+
     for (uint32_t i = 0; i < queueFamilyCount; i++) {
         if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             info->graphicsFamily = i;
             info->hasGraphicsFamily = true;
         }
-        
+
         VkBool32 presentSupport = false;
         vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
         if (presentSupport) {
             info->presentFamily = i;
             info->hasPresentFamily = true;
         }
-        
+
         if (info->hasGraphicsFamily && info->hasPresentFamily) {
             break;
         }
     }
-    
+
     free(queueFamilies);
 }
 
@@ -50,25 +51,25 @@ uint32_t rateDevice(VkPhysicalDevice device, VkSurfaceKHR surface) {
     vkGetPhysicalDeviceProperties(device, &info.properties);
     vkGetPhysicalDeviceFeatures(device, &info.features);
     findQueueFamilies(device, surface, &info);
-    
+
     if (!info.hasGraphicsFamily || !info.hasPresentFamily) {
         return 0;
     }
-    
+
     if (!info.features.samplerAnisotropy) {
         return 0;
     }
-    
+
     uint32_t score = 0;
-    
+
     // Discrete GPUs have a significant advantage
     if (info.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
         score += 1000;
     }
-    
+
     // Maximum possible size of textures affects graphics quality
     score += info.properties.limits.maxImageDimension2D;
-    
+
     return score;
 }
 
@@ -76,10 +77,10 @@ bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
     const char* deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     uint32_t extensionCount;
     vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, NULL);
-    
+
     VkExtensionProperties* availableExtensions = (VkExtensionProperties*)malloc(extensionCount * sizeof(VkExtensionProperties));
     vkEnumerateDeviceExtensionProperties(device, NULL, &extensionCount, availableExtensions);
-    
+
     for (size_t i = 0; i < sizeof(deviceExtensions) / sizeof(deviceExtensions[0]); i++) {
         bool found = false;
         for (uint32_t j = 0; j < extensionCount; j++) {
@@ -93,7 +94,7 @@ bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
             return false;
         }
     }
-    
+
     free(availableExtensions);
     return true;
 }
@@ -110,7 +111,7 @@ type Device struct {
 	GraphicsQueue  C.VkQueue
 	PresentQueue   C.VkQueue
 	CommandPool    C.VkCommandPool
-	
+
 	GraphicsFamily uint32
 	PresentFamily  uint32
 	Properties     C.VkPhysicalDeviceProperties
@@ -125,38 +126,38 @@ func PickPhysicalDevice(instance *Instance, surface C.VkSurfaceKHR) (*Device, er
 	if result != C.VK_SUCCESS || deviceCount == 0 {
 		return nil, fmt.Errorf("failed to find GPUs with Vulkan support")
 	}
-	
+
 	devices := make([]C.VkPhysicalDevice, deviceCount)
 	C.vkEnumeratePhysicalDevices(instance.Handle, &deviceCount, &devices[0])
-	
+
 	var bestDevice C.VkPhysicalDevice
 	var bestScore C.uint32_t
-	
+
 	for _, device := range devices {
 		if !C.checkDeviceExtensionSupport(device) {
 			continue
 		}
-		
+
 		score := C.rateDevice(device, surface)
 		if score > bestScore {
 			bestScore = score
 			bestDevice = device
 		}
 	}
-	
+
 	if bestDevice == nil {
 		return nil, fmt.Errorf("failed to find a suitable GPU")
 	}
-	
+
 	d := &Device{
 		PhysicalDevice: bestDevice,
 	}
-	
+
 	C.vkGetPhysicalDeviceProperties(bestDevice, &d.Properties)
 	C.vkGetPhysicalDeviceFeatures(bestDevice, &d.Features)
 	C.vkGetPhysicalDeviceMemoryProperties(bestDevice, &d.MemoryProps)
 	d.Limits = d.Properties.limits
-	
+
 	return d, nil
 }
 
@@ -166,66 +167,82 @@ func (d *Device) CreateLogicalDevice(surface C.VkSurfaceKHR) error {
 	C.findQueueFamilies(d.PhysicalDevice, surface, &deviceInfo)
 	d.GraphicsFamily = uint32(deviceInfo.graphicsFamily)
 	d.PresentFamily = uint32(deviceInfo.presentFamily)
-	
+
 	// Create queues
 	queueFamilies := []uint32{d.GraphicsFamily}
 	if d.GraphicsFamily != d.PresentFamily {
 		queueFamilies = append(queueFamilies, d.PresentFamily)
 	}
-	
-	queueCreateInfos := make([]C.VkDeviceQueueCreateInfo, len(queueFamilies))
-	queuePriority := C.float(1.0)
-	
+
+	// Allocate all C structs in C memory to avoid CGO pointer rules violation
+	queueCreateInfosSize := C.size_t(len(queueFamilies)) * C.size_t(unsafe.Sizeof(C.VkDeviceQueueCreateInfo{}))
+	queueCreateInfos := C.malloc(queueCreateInfosSize)
+	defer C.free(queueCreateInfos)
+	C.memset(queueCreateInfos, 0, queueCreateInfosSize)
+
+	// Allocate queue priority in C memory
+	queuePriority := (*C.float)(C.malloc(C.size_t(unsafe.Sizeof(C.float(0)))))
+	defer C.free(unsafe.Pointer(queuePriority))
+	*queuePriority = 1.0
+
 	for i, family := range queueFamilies {
-		queueCreateInfos[i] = C.VkDeviceQueueCreateInfo{
-			sType:            C.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-			queueFamilyIndex: C.uint32_t(family),
-			queueCount:       1,
-			pQueuePriorities: &queuePriority,
-		}
+		info := (*C.VkDeviceQueueCreateInfo)(unsafe.Pointer(uintptr(queueCreateInfos) + uintptr(i)*unsafe.Sizeof(C.VkDeviceQueueCreateInfo{})))
+		info.sType = C.VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO
+		info.pNext = nil
+		info.flags = 0
+		info.queueFamilyIndex = C.uint32_t(family)
+		info.queueCount = 1
+		info.pQueuePriorities = queuePriority
 	}
-	
-	// Device features
-	features := C.VkPhysicalDeviceFeatures{
-		samplerAnisotropy: C.VK_TRUE,
-		fillModeNonSolid:  C.VK_TRUE,
-	}
-	
+
+	// Device features - allocate in C memory
+	features := (*C.VkPhysicalDeviceFeatures)(C.malloc(C.size_t(unsafe.Sizeof(C.VkPhysicalDeviceFeatures{}))))
+	defer C.free(unsafe.Pointer(features))
+	C.memset(unsafe.Pointer(features), 0, C.size_t(unsafe.Sizeof(C.VkPhysicalDeviceFeatures{})))
+	features.samplerAnisotropy = C.VK_TRUE
+	features.fillModeNonSolid = C.VK_TRUE
+
 	// Device extensions
 	extensionName := C.CString(C.VK_KHR_SWAPCHAIN_EXTENSION_NAME)
 	defer C.free(unsafe.Pointer(extensionName))
-	
-	// Create device
-	createInfo := C.VkDeviceCreateInfo{
-		sType:                   C.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-		queueCreateInfoCount:    C.uint32_t(len(queueCreateInfos)),
-		pQueueCreateInfos:       &queueCreateInfos[0],
-		pEnabledFeatures:        &features,
-		enabledExtensionCount:   1,
-		ppEnabledExtensionNames: &extensionName,
-	}
-	
-	result := C.vkCreateDevice(d.PhysicalDevice, &createInfo, nil, &d.Device)
+
+	// Allocate extension names array in C memory
+	extensionNames := C.malloc(C.size_t(unsafe.Sizeof((*C.char)(nil))))
+	defer C.free(extensionNames)
+	*(*unsafe.Pointer)(extensionNames) = unsafe.Pointer(extensionName)
+
+	// Create device - allocate in C memory
+	createInfo := (*C.VkDeviceCreateInfo)(C.malloc(C.size_t(unsafe.Sizeof(C.VkDeviceCreateInfo{}))))
+	defer C.free(unsafe.Pointer(createInfo))
+	C.memset(unsafe.Pointer(createInfo), 0, C.size_t(unsafe.Sizeof(C.VkDeviceCreateInfo{})))
+	createInfo.sType = C.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO
+	createInfo.queueCreateInfoCount = C.uint32_t(len(queueFamilies))
+	createInfo.pQueueCreateInfos = (*C.VkDeviceQueueCreateInfo)(queueCreateInfos)
+	createInfo.pEnabledFeatures = features
+	createInfo.enabledExtensionCount = 1
+	createInfo.ppEnabledExtensionNames = (**C.char)(extensionNames)
+
+	result := C.vkCreateDevice(d.PhysicalDevice, createInfo, nil, &d.Device)
 	if result != C.VK_SUCCESS {
 		return fmt.Errorf("failed to create logical device: %d", result)
 	}
-	
+
 	// Get queues
 	C.vkGetDeviceQueue(d.Device, C.uint32_t(d.GraphicsFamily), 0, &d.GraphicsQueue)
 	C.vkGetDeviceQueue(d.Device, C.uint32_t(d.PresentFamily), 0, &d.PresentQueue)
-	
+
 	// Create command pool
 	poolInfo := C.VkCommandPoolCreateInfo{
 		sType:            C.VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 		queueFamilyIndex: C.uint32_t(d.GraphicsFamily),
 		flags:            C.VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
 	}
-	
+
 	result = C.vkCreateCommandPool(d.Device, &poolInfo, nil, &d.CommandPool)
 	if result != C.VK_SUCCESS {
 		return fmt.Errorf("failed to create command pool: %d", result)
 	}
-	
+
 	return nil
 }
 
@@ -247,7 +264,7 @@ func (d *Device) GetGPUName() string {
 	for i := 0; i < C.VK_MAX_PHYSICAL_DEVICE_NAME_SIZE; i++ {
 		name[i] = byte(d.Properties.deviceName[i])
 	}
-	
+
 	// Find null terminator
 	for i, b := range name {
 		if b == 0 {
@@ -274,7 +291,7 @@ func (d *Device) GetDeviceType() string {
 
 func (d *Device) FindMemoryType(typeFilter uint32, properties C.VkMemoryPropertyFlags) (uint32, error) {
 	for i := uint32(0); i < uint32(d.MemoryProps.memoryTypeCount); i++ {
-		if (typeFilter & (1 << i)) != 0 && (d.MemoryProps.memoryTypes[i].propertyFlags & properties) == properties {
+		if (typeFilter&(1<<i)) != 0 && (d.MemoryProps.memoryTypes[i].propertyFlags&properties) == properties {
 			return i, nil
 		}
 	}

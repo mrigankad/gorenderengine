@@ -43,3 +43,7 @@ func (v Vec4) ToVec3DivW() Vec3 {
 	}
 	return Vec3{X: v.X, Y: v.Y, Z: v.Z}
 }
+
+func (v Vec4) Div(scalar float32) Vec4 {
+	return Vec4{X: v.X / scalar, Y: v.Y / scalar, Z: v.Z / scalar, W: v.W / scalar}
+}

@@ -3,6 +3,7 @@ package vulkan
 /*
 #include <vulkan/vulkan.h>
 #include <stdlib.h>
+#include <string.h>
 
 VkShaderModule createShaderModule(VkDevice device, const uint32_t* code, size_t size) {
     VkShaderModuleCreateInfo createInfo = {0};
@@ -257,80 +258,85 @@ func (p *Pipeline) Destroy(device *Device) {
 }
 
 func CreateRenderPass(device *Device, swapchainFormat C.VkFormat, depthFormat C.VkFormat) (C.VkRenderPass, error) {
-	colorAttachment := C.VkAttachmentDescription{
-		format:         swapchainFormat,
-		samples:        C.VK_SAMPLE_COUNT_1_BIT,
-		loadOp:         C.VK_ATTACHMENT_LOAD_OP_CLEAR,
-		storeOp:        C.VK_ATTACHMENT_STORE_OP_STORE,
-		stencilLoadOp:  C.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-		stencilStoreOp: C.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-		initialLayout:  C.VK_IMAGE_LAYOUT_UNDEFINED,
-		finalLayout:    C.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+	// Count attachments
+	attachmentCount := 1
+	if depthFormat != 0 {
+		attachmentCount = 2
 	}
 	
-	colorAttachmentRef := C.VkAttachmentReference{
-		attachment: 0,
-		layout:     C.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-	}
+	// Allocate attachments in C memory
+	attachments := C.malloc(C.size_t(attachmentCount) * C.size_t(unsafe.Sizeof(C.VkAttachmentDescription{})))
+	defer C.free(attachments)
 	
-	var subpass C.VkSubpassDescription
-	var attachments []C.VkAttachmentDescription
+	// Color attachment
+	colorAttach := (*C.VkAttachmentDescription)(attachments)
+	colorAttach.format = swapchainFormat
+	colorAttach.samples = C.VK_SAMPLE_COUNT_1_BIT
+	colorAttach.loadOp = C.VK_ATTACHMENT_LOAD_OP_CLEAR
+	colorAttach.storeOp = C.VK_ATTACHMENT_STORE_OP_STORE
+	colorAttach.stencilLoadOp = C.VK_ATTACHMENT_LOAD_OP_DONT_CARE
+	colorAttach.stencilStoreOp = C.VK_ATTACHMENT_STORE_OP_DONT_CARE
+	colorAttach.initialLayout = C.VK_IMAGE_LAYOUT_UNDEFINED
+	colorAttach.finalLayout = C.VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
 	
-	attachments = append(attachments, colorAttachment)
+	// Color attachment reference - in C memory
+	colorAttachRef := (*C.VkAttachmentReference)(C.malloc(C.size_t(unsafe.Sizeof(C.VkAttachmentReference{}))))
+	defer C.free(unsafe.Pointer(colorAttachRef))
+	colorAttachRef.attachment = 0
+	colorAttachRef.layout = C.VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 	
-	subpass = C.VkSubpassDescription{
-		pipelineBindPoint:    C.VK_PIPELINE_BIND_POINT_GRAPHICS,
-		colorAttachmentCount: 1,
-		pColorAttachments:    &colorAttachmentRef,
-	}
+	// Subpass description - in C memory
+	subpass := (*C.VkSubpassDescription)(C.malloc(C.size_t(unsafe.Sizeof(C.VkSubpassDescription{}))))
+	defer C.free(unsafe.Pointer(subpass))
+	C.memset(unsafe.Pointer(subpass), 0, C.size_t(unsafe.Sizeof(C.VkSubpassDescription{})))
+	subpass.pipelineBindPoint = C.VK_PIPELINE_BIND_POINT_GRAPHICS
+	subpass.colorAttachmentCount = 1
+	subpass.pColorAttachments = colorAttachRef
 	
 	// Depth attachment if provided
-	var depthAttachment C.VkAttachmentDescription
-	var depthAttachmentRef C.VkAttachmentReference
-	
+	var depthAttachRef *C.VkAttachmentReference
 	if depthFormat != 0 {
-		depthAttachment = C.VkAttachmentDescription{
-			format:         depthFormat,
-			samples:        C.VK_SAMPLE_COUNT_1_BIT,
-			loadOp:         C.VK_ATTACHMENT_LOAD_OP_CLEAR,
-			storeOp:        C.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-			stencilLoadOp:  C.VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-			stencilStoreOp: C.VK_ATTACHMENT_STORE_OP_DONT_CARE,
-			initialLayout:  C.VK_IMAGE_LAYOUT_UNDEFINED,
-			finalLayout:    C.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-		}
+		depthAttach := (*C.VkAttachmentDescription)(unsafe.Pointer(uintptr(attachments) + unsafe.Sizeof(C.VkAttachmentDescription{})))
+		depthAttach.format = depthFormat
+		depthAttach.samples = C.VK_SAMPLE_COUNT_1_BIT
+		depthAttach.loadOp = C.VK_ATTACHMENT_LOAD_OP_CLEAR
+		depthAttach.storeOp = C.VK_ATTACHMENT_STORE_OP_DONT_CARE
+		depthAttach.stencilLoadOp = C.VK_ATTACHMENT_LOAD_OP_DONT_CARE
+		depthAttach.stencilStoreOp = C.VK_ATTACHMENT_STORE_OP_DONT_CARE
+		depthAttach.initialLayout = C.VK_IMAGE_LAYOUT_UNDEFINED
+		depthAttach.finalLayout = C.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 		
-		depthAttachmentRef = C.VkAttachmentReference{
-			attachment: 1,
-			layout:     C.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-		}
-		
-		attachments = append(attachments, depthAttachment)
-		subpass.pDepthStencilAttachment = &depthAttachmentRef
+		depthAttachRef = (*C.VkAttachmentReference)(C.malloc(C.size_t(unsafe.Sizeof(C.VkAttachmentReference{}))))
+		defer C.free(unsafe.Pointer(depthAttachRef))
+		depthAttachRef.attachment = 1
+		depthAttachRef.layout = C.VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+		subpass.pDepthStencilAttachment = depthAttachRef
 	}
 	
-	// Subpass dependency
-	dependency := C.VkSubpassDependency{
-		srcSubpass:    C.VK_SUBPASS_EXTERNAL,
-		dstSubpass:    0,
-		srcStageMask:  C.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		srcAccessMask: 0,
-		dstStageMask:  C.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		dstAccessMask: C.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-	}
+	// Subpass dependency - in C memory
+	dependency := (*C.VkSubpassDependency)(C.malloc(C.size_t(unsafe.Sizeof(C.VkSubpassDependency{}))))
+	defer C.free(unsafe.Pointer(dependency))
+	dependency.srcSubpass = C.VK_SUBPASS_EXTERNAL
+	dependency.dstSubpass = 0
+	dependency.srcStageMask = C.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+	dependency.srcAccessMask = 0
+	dependency.dstStageMask = C.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+	dependency.dstAccessMask = C.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
 	
-	renderPassInfo := C.VkRenderPassCreateInfo{
-		sType:           C.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-		attachmentCount: C.uint32_t(len(attachments)),
-		pAttachments:    &attachments[0],
-		subpassCount:    1,
-		pSubpasses:      &subpass,
-		dependencyCount: 1,
-		pDependencies:   &dependency,
-	}
+	// Render pass create info - in C memory
+	renderPassInfo := (*C.VkRenderPassCreateInfo)(C.malloc(C.size_t(unsafe.Sizeof(C.VkRenderPassCreateInfo{}))))
+	defer C.free(unsafe.Pointer(renderPassInfo))
+	C.memset(unsafe.Pointer(renderPassInfo), 0, C.size_t(unsafe.Sizeof(C.VkRenderPassCreateInfo{})))
+	renderPassInfo.sType = C.VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO
+	renderPassInfo.attachmentCount = C.uint32_t(attachmentCount)
+	renderPassInfo.pAttachments = (*C.VkAttachmentDescription)(attachments)
+	renderPassInfo.subpassCount = 1
+	renderPassInfo.pSubpasses = subpass
+	renderPassInfo.dependencyCount = 1
+	renderPassInfo.pDependencies = dependency
 	
 	var renderPass C.VkRenderPass
-	result := C.vkCreateRenderPass(device.Device, &renderPassInfo, nil, &renderPass)
+	result := C.vkCreateRenderPass(device.Device, renderPassInfo, nil, &renderPass)
 	if result != C.VK_SUCCESS {
 		return nil, fmt.Errorf("failed to create render pass: %d", result)
 	}

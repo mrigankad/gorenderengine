@@ -19,21 +19,21 @@ type Window struct {
 }
 
 type WindowConfig struct {
-	Width     int
-	Height    int
-	Title     string
-	Resizable bool
-	VSync     bool
+	Width      int
+	Height     int
+	Title      string
+	Resizable  bool
+	VSync      bool
 	Fullscreen bool
 }
 
 func DefaultWindowConfig() WindowConfig {
 	return WindowConfig{
-		Width:     1280,
-		Height:    720,
-		Title:     "Render Engine",
-		Resizable: true,
-		VSync:     true,
+		Width:      1280,
+		Height:     720,
+		Title:      "Render Engine",
+		Resizable:  true,
+		VSync:      true,
 		Fullscreen: false,
 	}
 }
@@ -88,7 +88,7 @@ func (w *Window) GetFramebufferSize() (int, int) {
 }
 
 func (w *Window) GetRequiredInstanceExtensions() []string {
-	return glfw.GetRequiredInstanceExtensions()
+	return w.Handle.GetRequiredInstanceExtensions()
 }
 
 func (w *Window) CreateWindowSurface(instance uintptr) (uintptr, error) {
@@ -108,6 +108,23 @@ func (w *Window) IsKeyPressed(key int) bool {
 func (w *Window) SetTitle(title string) {
 	w.Handle.SetTitle(title)
 	w.Title = title
+}
+
+func (w *Window) IsMouseButtonPressed(button int) bool {
+	return w.Handle.GetMouseButton(glfw.MouseButton(button)) == glfw.Press
+}
+
+func (w *Window) GetCursorPos() (float64, float64) {
+	return w.Handle.GetCursorPos()
+}
+
+// ScrollCallback is the type for scroll event handlers
+type ScrollCallback func(xoff, yoff float64)
+
+func (w *Window) SetScrollCallback(cb ScrollCallback) {
+	w.Handle.SetScrollCallback(func(win *glfw.Window, xoff, yoff float64) {
+		cb(xoff, yoff)
+	})
 }
 
 func boolToInt(b bool) int {

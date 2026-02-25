@@ -20,19 +20,19 @@ func AllocateCommandBuffers(device *Device, pool C.VkCommandPool, count uint32) 
 		level:              C.VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 		commandBufferCount: C.uint32_t(count),
 	}
-	
+
 	buffers := make([]CommandBuffer, count)
 	handles := make([]C.VkCommandBuffer, count)
-	
+
 	result := C.vkAllocateCommandBuffers(device.Device, &allocInfo, &handles[0])
 	if result != C.VK_SUCCESS {
 		return nil, fmt.Errorf("failed to allocate command buffers: %d", result)
 	}
-	
+
 	for i := range buffers {
 		buffers[i].Handle = handles[i]
 	}
-	
+
 	return buffers, nil
 }
 
@@ -40,11 +40,11 @@ func (cb *CommandBuffer) Begin(oneTime bool) error {
 	beginInfo := C.VkCommandBufferBeginInfo{
 		sType: C.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 	}
-	
+
 	if oneTime {
 		beginInfo.flags = C.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
 	}
-	
+
 	result := C.vkBeginCommandBuffer(cb.Handle, &beginInfo)
 	if result != C.VK_SUCCESS {
 		return fmt.Errorf("failed to begin recording command buffer: %d", result)
@@ -69,7 +69,7 @@ func (cb *CommandBuffer) BeginRenderPass(renderPass C.VkRenderPass, framebuffer 
 		clearValueCount: C.uint32_t(len(clearValues)),
 		pClearValues:    &clearValues[0],
 	}
-	
+
 	C.vkCmdBeginRenderPass(cb.Handle, &renderPassInfo, C.VK_SUBPASS_CONTENTS_INLINE)
 }
 
@@ -97,11 +97,23 @@ func (cb *CommandBuffer) DrawIndexed(indexCount, instanceCount, firstIndex, vert
 	C.vkCmdDrawIndexed(cb.Handle, C.uint32_t(indexCount), C.uint32_t(instanceCount), C.uint32_t(firstIndex), C.int32_t(vertexOffset), C.uint32_t(firstInstance))
 }
 
-func (cb *CommandBuffer) SetViewport(viewport C.VkViewport) {
+func (cb *CommandBuffer) SetViewport(x, y, width, height float32) {
+	viewport := C.VkViewport{
+		x:        C.float(x),
+		y:        C.float(y),
+		width:    C.float(width),
+		height:   C.float(height),
+		minDepth: 0.0,
+		maxDepth: 1.0,
+	}
 	C.vkCmdSetViewport(cb.Handle, 0, 1, &viewport)
 }
 
-func (cb *CommandBuffer) SetScissor(scissor C.VkRect2D) {
+func (cb *CommandBuffer) SetScissor(x, y int32, width, height uint32) {
+	scissor := C.VkRect2D{
+		offset: C.VkOffset2D{x: C.int32_t(x), y: C.int32_t(y)},
+		extent: C.VkExtent2D{width: C.uint32_t(width), height: C.uint32_t(height)},
+	}
 	C.vkCmdSetScissor(cb.Handle, 0, 1, &scissor)
 }
 
@@ -126,9 +138,9 @@ func TransitionImageLayout(cmdBuffer C.VkCommandBuffer, image C.VkImage, format 
 	barrier.subresourceRange.levelCount = C.uint32_t(mipLevels)
 	barrier.subresourceRange.baseArrayLayer = 0
 	barrier.subresourceRange.layerCount = 1
-	
+
 	var srcStage, dstStage C.VkPipelineStageFlags
-	
+
 	if oldLayout == C.VK_IMAGE_LAYOUT_UNDEFINED && newLayout == C.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL {
 		barrier.srcAccessMask = 0
 		barrier.dstAccessMask = C.VK_ACCESS_TRANSFER_WRITE_BIT
@@ -154,7 +166,7 @@ func TransitionImageLayout(cmdBuffer C.VkCommandBuffer, image C.VkImage, format 
 		srcStage = C.VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
 		dstStage = C.VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
 	}
-	
+
 	C.vkCmdPipelineBarrier(cmdBuffer, srcStage, dstStage, 0, 0, nil, 0, nil, 1, &barrier)
 }
 
@@ -172,7 +184,7 @@ func CopyBufferToImage(cmdBuffer C.VkCommandBuffer, buffer C.VkBuffer, image C.V
 		imageOffset: C.VkOffset3D{x: 0, y: 0, z: 0},
 		imageExtent: C.VkExtent3D{width: C.uint32_t(width), height: C.uint32_t(height), depth: 1},
 	}
-	
+
 	C.vkCmdCopyBufferToImage(cmdBuffer, buffer, image, C.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region)
 }
 
