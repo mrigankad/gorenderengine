@@ -1,6 +1,6 @@
 # Render Engine - Development Plan
 
-## Current State
+## Current State (Completed)
 - ✅ OpenGL 4.1 backend functional
 - ✅ Scene graph system with Transform, Node hierarchy
 - ✅ 7 primitive shapes (Cube, Sphere, Cylinder, Cone, Pyramid, Torus, Plane)
@@ -8,6 +8,18 @@
 - ✅ Basic directional lighting
 - ✅ Editor framework (input, selection, undo/redo, raycast)
 - ✅ Windows-only build (CGO + GLFW)
+- ✅ Free camera controller (WASD + mouse look)
+- ✅ Debug overlay (FPS, position, angles in console/title)
+- ✅ On-screen control hints and information
+
+---
+
+## Immediate Next Steps (Ready to Start)
+1. **ImGui Integration** - Add Dear ImGui for professional debug UI
+2. **Texture System** - Load PNG/JPG textures and apply to shapes
+3. **Model Importer** - glTF format loader for 3D models
+4. **Material System** - Basic Phong/PBR material properties
+5. **Performance Stats** - Memory usage, draw call count display
 
 ---
 
