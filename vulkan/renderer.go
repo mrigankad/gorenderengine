@@ -242,44 +242,61 @@ func (r *Renderer) CreateDefaultPipeline(vertexShader, fragmentShader []uint32) 
 	config.FragmentShaderCode = fragmentShader
 	config.ViewportWidth = float32(r.SwapChain.Extent.width)
 	config.ViewportHeight = float32(r.SwapChain.Extent.height)
+	config.DescriptorSetLayout = r.DescriptorSetLayout
 
 	r.DefaultPipeline, err = CreateGraphicsPipeline(r.Device, config)
 	if err != nil {
 		return err
 	}
 	r.DefaultPipeline.RenderPass = r.RenderPass
-	r.DefaultPipeline.DescriptorSetLayout = r.DescriptorSetLayout
 
 	return nil
 }
 
 func (r *Renderer) BeginFrame() (uint32, error) {
 	fence := r.InFlightFences[r.CurrentFrame]
-	fence.Wait(r.Device, ^uint64(0))
+
+	if err := fence.Wait(r.Device, ^uint64(0)); err != nil {
+		return 0, err
+	}
 
 	imageIndex, err := r.SwapChain.AcquireNextImage(r.Device, r.ImageAvailable[r.CurrentFrame].Handle, ^uint64(0))
 	if err != nil {
 		return 0, err
 	}
 
-	// Check if a previous frame is using this image
+	// Check if a previous frame is using this image (e.g. triple buffering).
+	// Wait directly on the raw fence handle to avoid corrupting the per-frame Fence struct.
 	if r.ImagesInFlight[imageIndex] != nil {
-		fence.Handle = r.ImagesInFlight[imageIndex]
-		fence.Wait(r.Device, ^uint64(0))
+		result := C.vkWaitForFences(r.Device.Device, 1, &r.ImagesInFlight[imageIndex], C.VK_TRUE, C.uint64_t(^uint64(0)))
+		if result != C.VK_SUCCESS {
+			return 0, fmt.Errorf("failed to wait for image in-flight fence: %d", result)
+		}
 	}
 
 	// Mark the image as now being in use by this frame
-	r.ImagesInFlight[imageIndex] = r.InFlightFences[r.CurrentFrame].Handle
+	r.ImagesInFlight[imageIndex] = fence.Handle
+
+	// Reset the fence so it can be signaled again by the next vkQueueSubmit.
+	// Vulkan requires the fence to be unsignaled before submitting.
+	if err := fence.Reset(r.Device); err != nil {
+		return 0, err
+	}
 
 	return imageIndex, nil
 }
 
-func (r *Renderer) BeginCommandBuffer(imageIndex uint32, clearColor core.Color) {
+func (r *Renderer) BeginCommandBuffer(imageIndex uint32, clearColor core.Color) error {
 	cmdBuffer := r.CommandBuffers[r.CurrentFrame]
 
-	// Reset and begin recording
-	C.vkResetCommandBuffer(cmdBuffer.Handle, 0)
-	cmdBuffer.Begin(false)
+	result := C.vkResetCommandBuffer(cmdBuffer.Handle, 0)
+	if result != C.VK_SUCCESS {
+		return fmt.Errorf("failed to reset command buffer: %d", result)
+	}
+
+	if err := cmdBuffer.Begin(false); err != nil {
+		return err
+	}
 
 	// Begin render pass
 	clearValues := []C.VkClearValue{
@@ -293,12 +310,13 @@ func (r *Renderer) BeginCommandBuffer(imageIndex uint32, clearColor core.Color) 
 	}
 
 	cmdBuffer.BeginRenderPass(r.RenderPass, r.SwapChain.Framebuffers[imageIndex], renderArea, clearValues)
+	return nil
 }
 
-func (r *Renderer) EndCommandBuffer() {
+func (r *Renderer) EndCommandBuffer() error {
 	cmdBuffer := r.CommandBuffers[r.CurrentFrame]
 	cmdBuffer.EndRenderPass()
-	cmdBuffer.End()
+	return cmdBuffer.End()
 }
 
 func (r *Renderer) SubmitAndPresent(imageIndex uint32) error {
@@ -378,11 +396,8 @@ func (r *Renderer) Destroy() {
 		r.DescriptorPool.Destroy(r.Device)
 	}
 
-	if r.DescriptorSetLayout != nil {
-		C.vkDestroyDescriptorSetLayout(r.Device.Device, r.DescriptorSetLayout, nil)
-	}
-
 	if r.DefaultPipeline != nil {
+		// Pipeline.Destroy() also destroys DescriptorSetLayout it owns.
 		r.DefaultPipeline.Destroy(r.Device)
 	}
 

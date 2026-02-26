@@ -11,11 +11,117 @@ import (
 	"render-engine/scene"
 )
 
+// CameraController handles keyboard and mouse input for camera movement
+type CameraController struct {
+	moveSpeed      float32
+	lookSpeed      float32
+	lastMouseX     float64
+	lastMouseY     float64
+	firstMouse     bool
+	rightMouseDown bool
+	yaw            float32
+	pitch          float32
+}
+
+func NewCameraController() *CameraController {
+	return &CameraController{
+		moveSpeed:  5.0,
+		lookSpeed:  0.005,
+		firstMouse: true,
+		yaw:        -90.0,
+		pitch:      0.0,
+	}
+}
+
+func (cc *CameraController) Update(window *core.Window, camera *scene.Camera, deltaTime float32) {
+	// Check for right mouse button
+	cc.rightMouseDown = window.IsMouseButtonPressed(1) // 1 = right mouse button
+
+	// Mouse look (only when right mouse button is pressed)
+	if cc.rightMouseDown {
+		mouseX, mouseY := window.GetCursorPos()
+
+		if cc.firstMouse {
+			cc.lastMouseX = mouseX
+			cc.lastMouseY = mouseY
+			cc.firstMouse = false
+		}
+
+		offsetX := float32(mouseX - cc.lastMouseX)
+		offsetY := float32(cc.lastMouseY - mouseY) // Inverted Y
+
+		cc.yaw += offsetX * cc.lookSpeed
+		cc.pitch += offsetY * cc.lookSpeed
+
+		// Clamp pitch
+		if cc.pitch > 89.0 {
+			cc.pitch = 89.0
+		}
+		if cc.pitch < -89.0 {
+			cc.pitch = -89.0
+		}
+
+		cc.lastMouseX = mouseX
+		cc.lastMouseY = mouseY
+	} else {
+		cc.firstMouse = true
+	}
+
+	// Calculate forward and right vectors from yaw/pitch
+	yawRad := cc.yaw * stdmath.Pi / 180.0
+	pitchRad := cc.pitch * stdmath.Pi / 180.0
+
+	forward := math.Vec3{
+		X: float32(stdmath.Cos(float64(yawRad)) * stdmath.Cos(float64(pitchRad))),
+		Y: float32(stdmath.Sin(float64(pitchRad))),
+		Z: float32(stdmath.Sin(float64(yawRad)) * stdmath.Cos(float64(pitchRad))),
+	}.Normalize()
+
+	right := math.Vec3{X: 1, Y: 0, Z: 0}
+	right = math.Vec3{
+		X: float32(stdmath.Cos(float64(yawRad - stdmath.Pi/2))),
+		Y: 0,
+		Z: float32(stdmath.Sin(float64(yawRad - stdmath.Pi/2))),
+	}.Normalize()
+
+	up := forward.Cross(right).Normalize()
+
+	// Keyboard movement
+	movement := math.Vec3{}
+
+	if window.IsKeyPressed(core.KeyW) {
+		movement = movement.Add(forward.Mul(cc.moveSpeed * deltaTime))
+	}
+	if window.IsKeyPressed(core.KeyS) {
+		movement = movement.Add(forward.Mul(-cc.moveSpeed * deltaTime))
+	}
+	if window.IsKeyPressed(core.KeyD) {
+		movement = movement.Add(right.Mul(cc.moveSpeed * deltaTime))
+	}
+	if window.IsKeyPressed(core.KeyA) {
+		movement = movement.Add(right.Mul(-cc.moveSpeed * deltaTime))
+	}
+	if window.IsKeyPressed(core.KeySpace) {
+		movement = movement.Add(math.Vec3Up.Mul(cc.moveSpeed * deltaTime))
+	}
+	if window.IsKeyPressed(core.KeyLeftControl) {
+		movement = movement.Add(math.Vec3Up.Mul(-cc.moveSpeed * deltaTime))
+	}
+
+	// Update camera position
+	newPos := camera.Position.Add(movement)
+	camera.SetPosition(newPos)
+
+	// Update camera look-at target
+	target := newPos.Add(forward)
+	camera.LookAt(target, up)
+}
+
 func main() {
-	fmt.Println("Starting basic triangle example...")
-	// Create window
+	fmt.Println("Starting shapes showcase...")
+
 	windowConfig := core.DefaultWindowConfig()
-	windowConfig.Title = "Render Engine - Basic Triangle"
+	windowConfig.Title = "Render Engine - Shapes"
 	windowConfig.Width = 1280
 	windowConfig.Height = 720
 
@@ -26,7 +132,6 @@ func main() {
 	}
 	defer window.Destroy()
 
-	// Create render engine
 	renderEngine, err := renderer.NewRenderEngine(window)
 	if err != nil {
 		fmt.Printf("Failed to create render engine: %v\n", err)
@@ -34,53 +139,45 @@ func main() {
 	}
 	defer renderEngine.Destroy()
 
-	// Create scene
+	// Scene setup
 	s := scene.NewScene()
 
-	// Create camera
 	camera := scene.NewCamera(float32(stdmath.Pi)/3, 16.0/9.0, 0.1, 1000.0)
-	camera.SetPosition(math.Vec3{X: 0, Y: 0, Z: 3})
+	camera.SetPosition(math.Vec3{X: 0, Y: 3, Z: 8})
+	camera.LookAt(math.Vec3{X: 0, Y: 0, Z: 0}, math.Vec3Up)
 	s.SetCamera(camera)
 
-	// Create a triangle mesh
-	device := renderEngine.Renderer.Device
+	// Create and position shapes in a grid pattern around the center
+	shapes := []struct {
+		name     string
+		mesh     *scene.Mesh
+		position math.Vec3
+	}{
+		// Top row
+		{"Cube", scene.CreateCube(1.0), math.Vec3{X: -4, Y: 1, Z: 0}},
+		{"Sphere", scene.CreateSphere(0.8, 24, 12), math.Vec3{X: 0, Y: 1, Z: 0}},
+		{"Cylinder", scene.CreateCylinder(0.6, 1.5, 16), math.Vec3{X: 4, Y: 1, Z: 0}},
 
-	// Create triangle
-	vertices := []core.Vertex{
-		{
-			Position: math.Vec3{X: 0, Y: -0.5, Z: 0},
-			Normal:   math.Vec3{X: 0, Y: 0, Z: 1},
-			UV:       math.Vec2{X: 0.5, Y: 0},
-			Color:    core.Color{R: 1, G: 0, B: 0, A: 1},
-		},
-		{
-			Position: math.Vec3{X: 0.5, Y: 0.5, Z: 0},
-			Normal:   math.Vec3{X: 0, Y: 0, Z: 1},
-			UV:       math.Vec2{X: 1, Y: 1},
-			Color:    core.Color{R: 0, G: 1, B: 0, A: 1},
-		},
-		{
-			Position: math.Vec3{X: -0.5, Y: 0.5, Z: 0},
-			Normal:   math.Vec3{X: 0, Y: 0, Z: 1},
-			UV:       math.Vec2{X: 0, Y: 1},
-			Color:    core.Color{R: 0, G: 0, B: 1, A: 1},
-		},
+		// Bottom row
+		{"Cone", scene.CreateCone(0.8, 1.5, 16), math.Vec3{X: -4, Y: -1.5, Z: 0}},
+		{"Pyramid", scene.CreatePyramid(1.5, 1.5), math.Vec3{X: 0, Y: -1.5, Z: 0}},
+		{"Torus", scene.CreateTorus(1.0, 0.3, 16, 8), math.Vec3{X: 4, Y: -1.5, Z: 0}},
 	}
-	indices := []uint32{0, 1, 2}
 
-	triangleMesh, err := scene.CreateMeshFromData(device, "Triangle", vertices, indices)
-	if err != nil {
-		fmt.Printf("Failed to create triangle mesh: %v\n", err)
-		return
+	shapeNodes := make([]*scene.Node, len(shapes))
+	for i, shape := range shapes {
+		defer shape.mesh.Destroy()
+
+		node := scene.NewNode(shape.name)
+		node.Mesh = shape.mesh
+		node.SetPosition(shape.position)
+		s.AddNode(node)
+		shapeNodes[i] = node
+
+		fmt.Printf("Added %s at position (%.1f, %.1f, %.1f)\n",
+			shape.name, shape.position.X, shape.position.Y, shape.position.Z)
 	}
-	defer triangleMesh.Destroy(device)
 
-	// Create triangle node
-	triangleNode := scene.NewNode("Triangle")
-	triangleNode.Mesh = triangleMesh
-	s.AddNode(triangleNode)
-
-	// Add light
 	light := &scene.Light{
 		Type:      scene.LightTypeDirectional,
 		Direction: math.Vec3{X: 0.5, Y: -1, Z: -0.5}.Normalize(),
@@ -91,65 +188,52 @@ func main() {
 
 	renderEngine.SetScene(s)
 
-	// Main loop
+	// Initialize camera controller
+	camController := NewCameraController()
+
 	frameCount := 0
 	lastTime := time.Now()
+	deltaTime := float32(0.016) // 60 FPS default
 
-	fmt.Println("Starting render loop...")
-	fmt.Println("Controls:")
-	fmt.Println("  ESC - Exit")
+	fmt.Println("Starting render loop... (ESC to exit)")
+	fmt.Println("Camera Controls:")
+	fmt.Println("  WASD - Move forward/backward/strafe")
+	fmt.Println("  Space/Ctrl - Move up/down")
+	fmt.Println("  Right Mouse Drag - Look around")
 
 	for !window.ShouldClose() {
 		window.PollEvents()
 
-		// Handle input
 		if window.IsKeyPressed(core.KeyEscape) {
 			break
 		}
 
-		// Rotate triangle
-		rotationSpeed := float32(1.0)
-		triangleNode.Rotate(math.Vec3Up, rotationSpeed*0.016)
+		// Update camera with controller
+		camController.Update(window, camera, deltaTime)
 
-		// Render
+		// Spin all shapes
+		for _, node := range shapeNodes {
+			node.Rotate(math.Vec3Up, 0.016)
+		}
+
 		if err := renderEngine.Render(); err != nil {
-			// Handle resize
 			width, height := window.GetFramebufferSize()
 			if width > 0 && height > 0 {
 				renderEngine.Resize(uint32(width), uint32(height))
 			}
 		}
 
-		// Calculate FPS
 		frameCount++
 		now := time.Now()
-		if now.Sub(lastTime).Seconds() >= 1.0 {
+		elapsed := now.Sub(lastTime)
+		if elapsed.Seconds() >= 1.0 {
 			window.SetTitle(fmt.Sprintf("%s - FPS: %d", windowConfig.Title, frameCount))
 			frameCount = 0
 			lastTime = now
 		}
+		deltaTime = float32(elapsed.Seconds())
 	}
 
 	renderEngine.WaitIdle()
 	fmt.Println("Exiting...")
-}
-
-// Helper to create a cube for more complex demo
-func createCubeDemo(renderEngine *renderer.RenderEngine, s *scene.Scene) error {
-	device := renderEngine.Renderer.Device
-
-	// Create multiple cubes
-	for i := 0; i < 5; i++ {
-		cubeMesh, err := scene.CreateCube(device, 0.5)
-		if err != nil {
-			return err
-		}
-
-		cubeNode := scene.NewNode(fmt.Sprintf("Cube%d", i))
-		cubeNode.Mesh = cubeMesh
-		cubeNode.SetPosition(math.Vec3{X: float32(i-2) * 1.5, Y: 0, Z: 0})
-		s.AddNode(cubeNode)
-	}
-
-	return nil
 }

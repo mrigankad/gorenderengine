@@ -39,18 +39,19 @@ type VertexInputDescription struct {
 }
 
 type PipelineConfig struct {
-	VertexShaderCode   []uint32
-	FragmentShaderCode []uint32
-	VertexDescription  VertexInputDescription
-	Topology           C.VkPrimitiveTopology
-	PolygonMode        C.VkPolygonMode
-	CullMode           C.VkCullModeFlags
-	FrontFace          C.VkFrontFace
-	DepthTestEnable    bool
-	DepthWriteEnable   bool
-	BlendEnable        bool
-	ViewportWidth      float32
-	ViewportHeight     float32
+	VertexShaderCode    []uint32
+	FragmentShaderCode  []uint32
+	VertexDescription   VertexInputDescription
+	Topology            C.VkPrimitiveTopology
+	PolygonMode         C.VkPolygonMode
+	CullMode            C.VkCullModeFlags
+	FrontFace           C.VkFrontFace
+	DepthTestEnable     bool
+	DepthWriteEnable    bool
+	BlendEnable         bool
+	ViewportWidth       float32
+	ViewportHeight      float32
+	DescriptorSetLayout C.VkDescriptorSetLayout
 }
 
 func DefaultPipelineConfig() PipelineConfig {
@@ -203,8 +204,9 @@ func CreateGraphicsPipeline(device *Device, config PipelineConfig) (*Pipeline, e
 	layoutInfo := C.VkPipelineLayoutCreateInfo{
 		sType: C.VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 	}
-	
-	if p.DescriptorSetLayout != nil {
+
+	if config.DescriptorSetLayout != nil {
+		p.DescriptorSetLayout = config.DescriptorSetLayout
 		layoutInfo.setLayoutCount = 1
 		layoutInfo.pSetLayouts = &p.DescriptorSetLayout
 	}
@@ -318,10 +320,10 @@ func CreateRenderPass(device *Device, swapchainFormat C.VkFormat, depthFormat C.
 	defer C.free(unsafe.Pointer(dependency))
 	dependency.srcSubpass = C.VK_SUBPASS_EXTERNAL
 	dependency.dstSubpass = 0
-	dependency.srcStageMask = C.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+	dependency.srcStageMask = C.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | C.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
 	dependency.srcAccessMask = 0
-	dependency.dstStageMask = C.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-	dependency.dstAccessMask = C.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+	dependency.dstStageMask = C.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | C.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+	dependency.dstAccessMask = C.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | C.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
 	
 	// Render pass create info - in C memory
 	renderPassInfo := (*C.VkRenderPassCreateInfo)(C.malloc(C.size_t(unsafe.Sizeof(C.VkRenderPassCreateInfo{}))))

@@ -67,7 +67,10 @@ func CreateBuffer(device *Device, size uint64, usage C.VkBufferUsageFlags, prope
 		return nil, fmt.Errorf("failed to allocate buffer memory: %d", result)
 	}
 
-	C.vkBindBufferMemory(device.Device, buffer.Handle, buffer.Memory, 0)
+	result = C.vkBindBufferMemory(device.Device, buffer.Handle, buffer.Memory, 0)
+	if result != C.VK_SUCCESS {
+		return nil, fmt.Errorf("failed to bind buffer memory: %d", result)
+	}
 
 	return buffer, nil
 }
@@ -194,7 +197,10 @@ func CreateImage(device *Device, width, height uint32, format C.VkFormat, tiling
 		return nil, fmt.Errorf("failed to allocate image memory: %d", result)
 	}
 
-	C.vkBindImageMemory(device.Device, img.Handle, img.Memory, 0)
+	result = C.vkBindImageMemory(device.Device, img.Handle, img.Memory, 0)
+	if result != C.VK_SUCCESS {
+		return nil, fmt.Errorf("failed to bind image memory: %d", result)
+	}
 
 	return img, nil
 }

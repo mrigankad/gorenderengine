@@ -43,7 +43,9 @@ func NewWindow(config WindowConfig) (*Window, error) {
 		return nil, fmt.Errorf("failed to initialize GLFW: %w", err)
 	}
 
-	glfw.WindowHint(glfw.ClientAPI, glfw.NoAPI)
+	glfw.WindowHint(glfw.ContextVersionMajor, 4)
+	glfw.WindowHint(glfw.ContextVersionMinor, 1)
+	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
 	glfw.WindowHint(glfw.Resizable, boolToInt(config.Resizable))
 
 	monitor := (*glfw.Monitor)(nil)
@@ -54,6 +56,13 @@ func NewWindow(config WindowConfig) (*Window, error) {
 	handle, err := glfw.CreateWindow(config.Width, config.Height, config.Title, monitor, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create window: %w", err)
+	}
+
+	handle.MakeContextCurrent()
+	if config.VSync {
+		glfw.SwapInterval(1)
+	} else {
+		glfw.SwapInterval(0)
 	}
 
 	window := &Window{
@@ -80,20 +89,11 @@ func (w *Window) PollEvents() {
 }
 
 func (w *Window) SwapBuffers() {
-	// Vulkan handles swapchain internally
+	w.Handle.SwapBuffers()
 }
 
 func (w *Window) GetFramebufferSize() (int, int) {
 	return w.Handle.GetFramebufferSize()
-}
-
-func (w *Window) GetRequiredInstanceExtensions() []string {
-	return w.Handle.GetRequiredInstanceExtensions()
-}
-
-func (w *Window) CreateWindowSurface(instance uintptr) (uintptr, error) {
-	surface, err := w.Handle.CreateWindowSurface(instance, nil)
-	return surface, err
 }
 
 func (w *Window) Destroy() {

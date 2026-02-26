@@ -5,11 +5,10 @@ import (
 
 	"render-engine/core"
 	"render-engine/math"
-	"render-engine/vulkan"
 )
 
 // CreateSphere generates a UV-sphere mesh
-func CreateSphere(device *vulkan.Device, radius float32, segments, rings int) (*Mesh, error) {
+func CreateSphere(radius float32, segments, rings int) *Mesh {
 	if segments < 3 {
 		segments = 3
 	}
@@ -53,11 +52,11 @@ func CreateSphere(device *vulkan.Device, radius float32, segments, rings int) (*
 		}
 	}
 
-	return CreateMeshFromData(device, "Sphere", vertices, indices)
+	return CreateMeshFromData("Sphere", vertices, indices)
 }
 
 // CreateCylinder generates a cylinder mesh
-func CreateCylinder(device *vulkan.Device, radius, height float32, segments int) (*Mesh, error) {
+func CreateCylinder(radius, height float32, segments int) *Mesh {
 	if segments < 3 {
 		segments = 3
 	}
@@ -66,7 +65,6 @@ func CreateCylinder(device *vulkan.Device, radius, height float32, segments int)
 	var indices []uint32
 	halfHeight := height / 2.0
 
-	// Side vertices
 	for i := 0; i <= segments; i++ {
 		theta := float64(i) * 2.0 * stdmath.Pi / float64(segments)
 		cosT := float32(stdmath.Cos(theta))
@@ -74,14 +72,12 @@ func CreateCylinder(device *vulkan.Device, radius, height float32, segments int)
 		normal := math.Vec3{X: cosT, Y: 0, Z: sinT}
 		u := float32(i) / float32(segments)
 
-		// Bottom
 		vertices = append(vertices, core.Vertex{
 			Position: math.Vec3{X: cosT * radius, Y: -halfHeight, Z: sinT * radius},
 			Normal:   normal,
 			UV:       math.Vec2{X: u, Y: 0},
 			Color:    core.Color{R: 0.8, G: 0.8, B: 0.8, A: 1.0},
 		})
-		// Top
 		vertices = append(vertices, core.Vertex{
 			Position: math.Vec3{X: cosT * radius, Y: halfHeight, Z: sinT * radius},
 			Normal:   normal,
@@ -96,7 +92,6 @@ func CreateCylinder(device *vulkan.Device, radius, height float32, segments int)
 		indices = append(indices, base+2, base+1, base+3)
 	}
 
-	// Top cap
 	topCenter := uint32(len(vertices))
 	vertices = append(vertices, core.Vertex{
 		Position: math.Vec3{X: 0, Y: halfHeight, Z: 0},
@@ -130,7 +125,6 @@ func CreateCylinder(device *vulkan.Device, radius, height float32, segments int)
 		indices = append(indices, topCenter, v1, v2)
 	}
 
-	// Bottom cap
 	botCenter := uint32(len(vertices))
 	vertices = append(vertices, core.Vertex{
 		Position: math.Vec3{X: 0, Y: -halfHeight, Z: 0},
@@ -164,11 +158,11 @@ func CreateCylinder(device *vulkan.Device, radius, height float32, segments int)
 		indices = append(indices, botCenter, v2, v1)
 	}
 
-	return CreateMeshFromData(device, "Cylinder", vertices, indices)
+	return CreateMeshFromData("Cylinder", vertices, indices)
 }
 
 // CreateCone generates a cone mesh
-func CreateCone(device *vulkan.Device, radius, height float32, segments int) (*Mesh, error) {
+func CreateCone(radius, height float32, segments int) *Mesh {
 	if segments < 3 {
 		segments = 3
 	}
@@ -177,7 +171,6 @@ func CreateCone(device *vulkan.Device, radius, height float32, segments int) (*M
 	var indices []uint32
 	halfHeight := height / 2.0
 
-	// Tip vertex
 	tipIdx := uint32(0)
 	vertices = append(vertices, core.Vertex{
 		Position: math.Vec3{X: 0, Y: halfHeight, Z: 0},
@@ -186,13 +179,11 @@ func CreateCone(device *vulkan.Device, radius, height float32, segments int) (*M
 		Color:    core.Color{R: 0.8, G: 0.8, B: 0.8, A: 1.0},
 	})
 
-	// Side vertices
 	for i := 0; i <= segments; i++ {
 		theta := float64(i) * 2.0 * stdmath.Pi / float64(segments)
 		cosT := float32(stdmath.Cos(theta))
 		sinT := float32(stdmath.Sin(theta))
 
-		// Calculate normal for cone side
 		slopeAngle := float32(stdmath.Atan2(float64(radius), float64(height)))
 		ny := float32(stdmath.Cos(float64(slopeAngle)))
 		nr := float32(stdmath.Sin(float64(slopeAngle)))
@@ -206,12 +197,10 @@ func CreateCone(device *vulkan.Device, radius, height float32, segments int) (*M
 		})
 	}
 
-	// Side faces
 	for i := 0; i < segments; i++ {
 		indices = append(indices, tipIdx, uint32(i+1), uint32(i+2))
 	}
 
-	// Bottom cap
 	botCenter := uint32(len(vertices))
 	vertices = append(vertices, core.Vertex{
 		Position: math.Vec3{X: 0, Y: -halfHeight, Z: 0},
@@ -245,11 +234,11 @@ func CreateCone(device *vulkan.Device, radius, height float32, segments int) (*M
 		indices = append(indices, botCenter, v2, v1)
 	}
 
-	return CreateMeshFromData(device, "Cone", vertices, indices)
+	return CreateMeshFromData("Cone", vertices, indices)
 }
 
 // CreateTorus generates a torus mesh
-func CreateTorus(device *vulkan.Device, majorRadius, minorRadius float32, majorSegments, minorSegments int) (*Mesh, error) {
+func CreateTorus(majorRadius, minorRadius float32, majorSegments, minorSegments int) *Mesh {
 	if majorSegments < 3 {
 		majorSegments = 3
 	}
@@ -274,7 +263,6 @@ func CreateTorus(device *vulkan.Device, majorRadius, minorRadius float32, majorS
 			y := minorRadius * sinPhi
 			z := (majorRadius + minorRadius*cosPhi) * sinTheta
 
-			// Normal points from center of tube to surface
 			nx := cosPhi * cosTheta
 			ny := sinPhi
 			nz := cosPhi * sinTheta
@@ -298,11 +286,11 @@ func CreateTorus(device *vulkan.Device, majorRadius, minorRadius float32, majorS
 		}
 	}
 
-	return CreateMeshFromData(device, "Torus", vertices, indices)
+	return CreateMeshFromData("Torus", vertices, indices)
 }
 
 // CreatePlane generates a flat plane mesh
-func CreatePlane(device *vulkan.Device, width, depth float32, subdivisions int) (*Mesh, error) {
+func CreatePlane(width, depth float32, subdivisions int) *Mesh {
 	if subdivisions < 1 {
 		subdivisions = 1
 	}
@@ -343,5 +331,142 @@ func CreatePlane(device *vulkan.Device, width, depth float32, subdivisions int) 
 		}
 	}
 
-	return CreateMeshFromData(device, "Plane", vertices, indices)
+	return CreateMeshFromData("Plane", vertices, indices)
+}
+
+// CreatePyramid generates a pyramid mesh with a square base
+func CreatePyramid(width, height float32) *Mesh {
+	var vertices []core.Vertex
+	var indices []uint32
+
+	halfW := width / 2.0
+	halfH := height / 2.0
+
+	// Base vertices (square at y = -height/2)
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: -halfW, Y: -halfH, Z: -halfW},
+		Normal:   math.Vec3Down,
+		UV:       math.Vec2{X: 0, Y: 0},
+		Color:    core.Color{R: 1.0, G: 0.5, B: 0.2, A: 1.0},
+	})
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: halfW, Y: -halfH, Z: -halfW},
+		Normal:   math.Vec3Down,
+		UV:       math.Vec2{X: 1, Y: 0},
+		Color:    core.Color{R: 1.0, G: 0.5, B: 0.2, A: 1.0},
+	})
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: halfW, Y: -halfH, Z: halfW},
+		Normal:   math.Vec3Down,
+		UV:       math.Vec2{X: 1, Y: 1},
+		Color:    core.Color{R: 1.0, G: 0.5, B: 0.2, A: 1.0},
+	})
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: -halfW, Y: -halfH, Z: halfW},
+		Normal:   math.Vec3Down,
+		UV:       math.Vec2{X: 0, Y: 1},
+		Color:    core.Color{R: 1.0, G: 0.5, B: 0.2, A: 1.0},
+	})
+
+	// Base face (2 triangles)
+	indices = append(indices, 0, 2, 1)
+	indices = append(indices, 0, 3, 2)
+
+	// Tip vertex (top at y = height/2)
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: 0, Y: halfH, Z: 0},
+		Normal:   math.Vec3Up,
+		UV:       math.Vec2{X: 0.5, Y: 0.5},
+		Color:    core.Color{R: 1.0, G: 0.2, B: 0.2, A: 1.0},
+	})
+
+	// Front face (0-1-tip)
+	frontNorm := math.Vec3{X: 0, Y: 0.5, Z: -1}.Normalize()
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: -halfW, Y: -halfH, Z: -halfW},
+		Normal:   frontNorm,
+		UV:       math.Vec2{X: 0, Y: 0},
+		Color:    core.Color{R: 1.0, G: 0.3, B: 0.3, A: 1.0},
+	})
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: halfW, Y: -halfH, Z: -halfW},
+		Normal:   frontNorm,
+		UV:       math.Vec2{X: 1, Y: 0},
+		Color:    core.Color{R: 1.0, G: 0.3, B: 0.3, A: 1.0},
+	})
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: 0, Y: halfH, Z: 0},
+		Normal:   frontNorm,
+		UV:       math.Vec2{X: 0.5, Y: 1},
+		Color:    core.Color{R: 1.0, G: 0.3, B: 0.3, A: 1.0},
+	})
+	indices = append(indices, 5, 7, 6)
+
+	// Right face (1-2-tip)
+	rightNorm := math.Vec3{X: 1, Y: 0.5, Z: 0}.Normalize()
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: halfW, Y: -halfH, Z: -halfW},
+		Normal:   rightNorm,
+		UV:       math.Vec2{X: 0, Y: 0},
+		Color:    core.Color{R: 0.3, G: 1.0, B: 0.3, A: 1.0},
+	})
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: halfW, Y: -halfH, Z: halfW},
+		Normal:   rightNorm,
+		UV:       math.Vec2{X: 1, Y: 0},
+		Color:    core.Color{R: 0.3, G: 1.0, B: 0.3, A: 1.0},
+	})
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: 0, Y: halfH, Z: 0},
+		Normal:   rightNorm,
+		UV:       math.Vec2{X: 0.5, Y: 1},
+		Color:    core.Color{R: 0.3, G: 1.0, B: 0.3, A: 1.0},
+	})
+	indices = append(indices, 8, 10, 9)
+
+	// Back face (2-3-tip)
+	backNorm := math.Vec3{X: 0, Y: 0.5, Z: 1}.Normalize()
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: halfW, Y: -halfH, Z: halfW},
+		Normal:   backNorm,
+		UV:       math.Vec2{X: 0, Y: 0},
+		Color:    core.Color{R: 0.3, G: 0.3, B: 1.0, A: 1.0},
+	})
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: -halfW, Y: -halfH, Z: halfW},
+		Normal:   backNorm,
+		UV:       math.Vec2{X: 1, Y: 0},
+		Color:    core.Color{R: 0.3, G: 0.3, B: 1.0, A: 1.0},
+	})
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: 0, Y: halfH, Z: 0},
+		Normal:   backNorm,
+		UV:       math.Vec2{X: 0.5, Y: 1},
+		Color:    core.Color{R: 0.3, G: 0.3, B: 1.0, A: 1.0},
+	})
+	indices = append(indices, 11, 13, 12)
+
+	// Left face (3-0-tip)
+	leftNorm := math.Vec3{X: -1, Y: 0.5, Z: 0}.Normalize()
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: -halfW, Y: -halfH, Z: halfW},
+		Normal:   leftNorm,
+		UV:       math.Vec2{X: 0, Y: 0},
+		Color:    core.Color{R: 1.0, G: 1.0, B: 0.3, A: 1.0},
+	})
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: -halfW, Y: -halfH, Z: -halfW},
+		Normal:   leftNorm,
+		UV:       math.Vec2{X: 1, Y: 0},
+		Color:    core.Color{R: 1.0, G: 1.0, B: 0.3, A: 1.0},
+	})
+	vertices = append(vertices, core.Vertex{
+		Position: math.Vec3{X: 0, Y: halfH, Z: 0},
+		Normal:   leftNorm,
+		UV:       math.Vec2{X: 0.5, Y: 1},
+		Color:    core.Color{R: 1.0, G: 1.0, B: 0.3, A: 1.0},
+	})
+	indices = append(indices, 14, 16, 15)
+
+	return CreateMeshFromData("Pyramid", vertices, indices)
 }

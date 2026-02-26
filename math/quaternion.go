@@ -128,7 +128,7 @@ func (q Quaternion) ToEuler() Vec3 {
 	cosYCosR := 1 - 2*(q.Y*q.Y+q.Z*q.Z)
 	yaw := float32(math.Atan2(float64(sinYCosR), float64(cosYCosR)))
 	
-	return Vec3{X: pitch, Y: yaw, Z: roll}
+	return Vec3{X: roll, Y: pitch, Z: yaw}
 }
 
 func (q Quaternion) Lerp(other Quaternion, t float32) Quaternion {
