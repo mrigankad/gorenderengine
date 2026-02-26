@@ -21,7 +21,8 @@
       "Bash(timeout 2 ./triangle_app.exe:*)",
       "Bash(timeout 3 ./triangle_app.exe:*)",
       "Bash(grep:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(timeout 4 ./triangle_app.exe:*)"
     ]
   }
 }

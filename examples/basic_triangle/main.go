@@ -188,18 +188,32 @@ func main() {
 
 	renderEngine.SetScene(s)
 
-	// Initialize camera controller
+	// Initialize camera controller and HUD
 	camController := NewCameraController()
+	debugOverlay := &DebugOverlay{}
 
 	frameCount := 0
 	lastTime := time.Now()
 	deltaTime := float32(0.016) // 60 FPS default
+	fpsCounter := 0
+	fpsLastTime := time.Now()
 
-	fmt.Println("Starting render loop... (ESC to exit)")
-	fmt.Println("Camera Controls:")
-	fmt.Println("  WASD - Move forward/backward/strafe")
-	fmt.Println("  Space/Ctrl - Move up/down")
-	fmt.Println("  Right Mouse Drag - Look around")
+	fmt.Println("╔════════════════════════════════════════╗")
+	fmt.Println("║  Render Engine - Shapes Showcase      ║")
+	fmt.Println("╚════════════════════════════════════════╝")
+	fmt.Println("")
+	fmt.Println("📷 CAMERA CONTROLS:")
+	fmt.Println("   ↑ W / ↓ S          - Move forward/backward")
+	fmt.Println("   → D / ← A          - Strafe right/left")
+	fmt.Println("   ⇧ Space / ⌃ Ctrl   - Move up/down")
+	fmt.Println("   🖱 Right Mouse Drag - Look around")
+	fmt.Println("")
+	fmt.Println("⚙️  VIEW:")
+	fmt.Println("   📊 FPS shown in window title")
+	fmt.Println("   📍 Camera position shown in title")
+	fmt.Println("")
+	fmt.Println("🛑 EXIT: Press ESC to quit")
+	fmt.Println("")
 
 	for !window.ShouldClose() {
 		window.PollEvents()
@@ -223,14 +237,48 @@ func main() {
 			}
 		}
 
+		// Update debug info for display
+		debugOverlay.Clear()
+		debugOverlay.AddLine("FPS: %d", fpsCounter)
+		debugOverlay.AddLine("Pos: %.1f, %.1f, %.1f", camera.Position.X, camera.Position.Y, camera.Position.Z)
+		debugOverlay.AddLine("Look: %.2f°, %.2f°", camController.yaw, camController.pitch)
+		debugOverlay.AddLine("Shapes: %d", len(shapeNodes))
+
 		frameCount++
+		fpsCounter++
 		now := time.Now()
 		elapsed := now.Sub(lastTime)
+		fpsDelta := now.Sub(fpsLastTime)
+
+		// Update window title with realtime info
 		if elapsed.Seconds() >= 1.0 {
-			window.SetTitle(fmt.Sprintf("%s - FPS: %d", windowConfig.Title, frameCount))
+			window.SetTitle(fmt.Sprintf(
+				"%s - FPS: %d | Pos: (%.1f, %.1f, %.1f)",
+				windowConfig.Title,
+				frameCount,
+				camera.Position.X,
+				camera.Position.Y,
+				camera.Position.Z,
+			))
 			frameCount = 0
 			lastTime = now
 		}
+
+		// Print debug info every 60 frames
+		if fpsCounter%60 == 0 {
+			fpsRate := float64(fpsCounter) / fpsDelta.Seconds()
+			fmt.Printf("[Frame %d] FPS: %.1f | Pos: (%.2f, %.2f, %.2f) | Yaw: %.1f° Pitch: %.1f°\n",
+				fpsCounter,
+				fpsRate,
+				camera.Position.X,
+				camera.Position.Y,
+				camera.Position.Z,
+				camController.yaw,
+				camController.pitch,
+			)
+			fpsLastTime = now
+		}
+
 		deltaTime = float32(elapsed.Seconds())
 	}
 
