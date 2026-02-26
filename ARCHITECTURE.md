@@ -1,4 +1,4 @@
-# 3D Render Engine Architecture
+# Sonorlax Engine Architecture
 
 ## Overview
 

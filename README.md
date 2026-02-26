@@ -1,150 +1,158 @@
-# 3D Render Engine in Go
+<div align="center">
 
-A cross-platform 3D rendering engine built from scratch in Go with Vulkan support for AMD, Intel, and NVIDIA GPUs.
+<img src="./Chibilax.png" alt="Sonorlax Engine Logo" width="200"/>
 
-## Features
+# 🚀 Sonorlax Engine
+**A Go-based 3D render engine and editor built from scratch.**
 
-- **Cross-Platform GPU Support**: Works with AMD, Intel, and NVIDIA GPUs via Vulkan
-- **Modern Graphics API**: Uses Vulkan for high-performance, low-overhead rendering
-- **Math Library**: Complete vector, matrix, and quaternion math library
-- **Scene Graph**: Hierarchical scene management with transform hierarchy
-- **Camera System**: Perspective/orthographic cameras with orbit controls
-- **Mesh Rendering**: Vertex and index buffer management with GPU upload
-- **Shader Support**: SPIR-V shader loading with pipeline state management
+[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](https://golang.org/)
+[![OpenGL](https://img.shields.io/badge/OpenGL-4.1-5586A4?logo=opengl)](https://www.opengl.org/)
+[![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows)](https://microsoft.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Architecture
+</div>
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                   APPLICATION LAYER                          │
-├──────────────────────────────────────────────────────────────┤
-│                   SCENE GRAPH (Go)                           │
-│         (Entities, Transforms, Cameras, Lights)             │
-├──────────────────────────────────────────────────────────────┤
-│              RENDERER (Go)                                   │
-│    (Materials, Meshes, Textures, Render Queue)              │
-├──────────────────────────────────────────────────────────────┤
-│              VULKAN BACKEND (Go + CGO)                       │
-│    (Instance, Device, Swapchain, Pipeline, Commands)        │
-├──────────────────────────────────────────────────────────────┤
-│                    VULKAN DRIVER                             │
-│       (AMD, Intel, NVIDIA drivers via Vulkan)               │
-└──────────────────────────────────────────────────────────────┘
-```
+---
 
-## Project Structure
+## ✨ Features
 
-```
-├── math/           # Vector, Matrix, Quaternion math library
-├── core/           # Core types (Vertex, Color, Transform, Window)
-├── vulkan/         # Vulkan graphics API wrapper
-├── renderer/       # High-level rendering interface
-├── scene/          # Scene graph and camera system
-└── examples/       # Example applications
-```
+- **🎮 OpenGL 4.1 Backend**: Fast, reliable, and modern graphics rendering API.
+- **🌳 Scene Graph Architecture**: Hierarchical Node/Transform system for complex scene management.
+- **🧮 Custom Math Library**: Zero-dependency `Vec2`, `Vec3`, `Vec4`, `Mat4`, and `Quaternion` implementations natively in Go.
+- **🎥 Camera System**: Perspective prediction, look-at functionality, and a free-look (WASD + Mouse) controller.
+- **🛠️ Built-in Editor**: An interactive editor framework with selection, raycasting, undo/redo, and visual gizmos.
+- **🔶 Primitive Shapes**: Out-of-the-box support for Cube, Sphere, Cylinder, Cone, Pyramid, Torus, and Plane meshes.
+- **💡 Lighting**: Basic directional lighting and configurable ambient properties.
+- **📊 Debug OVERLAY**: Real-time FPS monitoring, position tracking, and camera angles displayed directly on screen.
 
-## Requirements
+---
 
-- Go 1.21+
-- Vulkan SDK (1.2+)
-- C compiler (GCC on Linux/Windows, Xcode on macOS)
-- GLFW3
+## 🏗️ Architecture Layers
 
-### Platform-Specific Setup
+The engine is cleanly divided into decoupled packages, ensuring maintanibility and extensibility.
 
-#### Windows
-1. Install [Vulkan SDK](https://vulkan.lunarg.com/)
-2. Install MinGW-w64 or use Visual Studio
-3. Run from Visual Studio Developer Command Prompt:
-   ```batch
-   build.bat
-   ```
-
-#### Linux
-```bash
-# Ubuntu/Debian
-sudo apt-get install libvulkan-dev libglfw3-dev
-
-# Build
-go build ./...
+```mermaid
+graph TD;
+    ApplicationLayer[Application Layer / Editor] --> SceneGraph[Scene Graph & Cameras]
+    SceneGraph --> Renderer[Renderer & Shaders]
+    Renderer --> Backend[OpenGL 4.1 Backend]
+    Backend --> GLFW[GLFW3 Windowing]
+    
+    Math[Math Library] -.-> SceneGraph
+    Math -.-> Renderer
+    Math -.-> Backend
 ```
 
-#### macOS
-```bash
-# Install MoltenVK (usually comes with Vulkan SDK)
-brew install glfw
+### 🗂️ Project Structure
 
-# Build
-go build ./...
+- `math/` - High-performance Vector, Matrix, and Quaternion operations.
+- `core/` - Core layout types (Vertex, Color, Transform, Window).
+- `opengl/` - OpenGL 4.1 graphics API wrapper (via `go-gl`).
+- `renderer/` - High-level rendering abstraction (Shaders, Material bindings).
+- `scene/` - Scene graph, mesh primitives, and camera logic.
+- `editor/` - Interactive editing tools, raycasting, and user input handling.
+- `examples/` - Demonstration applications and usage examples.
+
+> **Note**: A legacy Vulkan backend exists in the repository for reference purposes, but the active rendering pipeline utilizes OpenGL 4.1.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+To build the engine, you will need:
+- **Go 1.21** or newer
+- **C compiler** (MinGW-w64 or Visual Studio on Windows) for CGO support
+- **GLFW3** development libraries
+
+### Windows Setup
+
+The engine is currently highly optimized for Windows development using MSVC or MinGW.
+
+1. Ensure Go is installed and in your system PATH.
+2. Clone the repository.
+3. Use the provided build script from a developer command prompt:
+
+```batch
+build.bat
 ```
 
-## Usage
+> Or build directly with Go:
+> ```bash
+> go build ./...
+> ```
 
-### Basic Example
+---
+
+## 💻 Usage Example
+
+Creating a basic scene with a rotating 3D object is simple and intuitive:
 
 ```go
 package main
 
 import (
     "render-engine/core"
+    "render-engine/opengl"
     "render-engine/renderer"
     "render-engine/scene"
 )
 
 func main() {
-    // Create window
+    // 1. Initialize Window
     window, _ := core.NewWindow(core.DefaultWindowConfig())
     defer window.Destroy()
     
-    // Create render engine
-    engine, _ := renderer.NewRenderEngine(window)
+    // 2. Initialize Render Engine
+    backend := opengl.NewBackend()
+    engine, _ := renderer.NewRenderEngine(window, backend)
     defer engine.Destroy()
     
-    // Create scene
+    // 3. Setup Scene & Camera
     s := scene.NewScene()
     camera := scene.NewCamera(1.0472, 16.0/9.0, 0.1, 1000.0)
     s.SetCamera(camera)
     
-    // Add objects
-    triangle, _ := scene.CreateTriangle(engine.Renderer.Device)
-    node := scene.NewNode("Triangle")
-    node.Mesh = triangle
+    // 4. Add Objects
+    cube, _ := scene.CreateCube()
+    node := scene.NewNode("MyCube")
+    node.Mesh = cube
     s.AddNode(node)
     
     engine.SetScene(s)
     
-    // Main loop
+    // 5. Main Loop
     for !window.ShouldClose() {
         window.PollEvents()
+        
+        // Rotate the cube slowly
         node.Rotate(math.Vec3Up, 0.01)
+        
         engine.Render()
     }
 }
 ```
 
-## GPU Support
+---
 
-The engine uses Vulkan, which provides native support for:
-- **AMD**: Radeon GPUs (GCN and RDNA architectures)
-- **NVIDIA**: GeForce/Quadro/RTX GPUs (Kepler and newer)
-- **Intel**: HD/UHD/Xe Graphics (Broadwell and newer)
-- **Apple**: Via MoltenVK (translates Vulkan to Metal)
+## 🗺️ Roadmap
 
-## Math Library
+The engine is actively under development. Upcoming features include:
 
-The math library provides:
-- `Vec2`, `Vec3`, `Vec4`: 2D/3D/4D vectors
-- `Mat4`: 4x4 transformation matrices
-- `Quaternion`: Rotation representation
-- Common operations: addition, subtraction, dot product, cross product, normalization
-- Matrix operations: multiplication, inversion, look-at, perspective, orthographic
+- [ ] **ImGui Integration**: Professional debug UI for the editor.
+- [ ] **Asset Pipeline**: Loading PNG/JPG textures, and GLTF/GLB 3D models.
+- [ ] **Material System**: Physically Based Rendering (PBR) workflows.
+- [ ] **Advanced Lighting & Shadows**: Directional shadows, point lights, and environment mapping.
+- [ ] **Post-Processing**: Bloom, HDR tone mapping, and SSAO.
 
-## License
+Check out `plan.md` for the complete development roadmap!
 
-MIT License - See LICENSE file for details.
+---
 
-## Acknowledgments
+## 📄 License & Acknowledgments
 
-- [Vulkan](https://www.vulkan.org/) - Graphics API
-- [GLFW](https://www.glfw.org/) - Windowing library
-- [Go-GL](https://github.com/go-gl/glfw) - Go GLFW bindings
+This project is licensed under the **MIT License**.
+
+- Graphics API bindings via [go-gl/gl](https://github.com/go-gl/gl)
+- Windowing via [go-gl/glfw](https://github.com/go-gl/glfw)

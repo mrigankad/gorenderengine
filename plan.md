@@ -1,4 +1,4 @@
-# Render Engine - Development Plan
+# Sonorlax Engine - Development Plan
 
 ## Current State (Completed)
 - ✅ OpenGL 4.1 backend functional
