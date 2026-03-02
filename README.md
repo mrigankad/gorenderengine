@@ -199,3 +199,150 @@ docs/              ← ARCHITECTURE.md, plan.md
 
 **Build:** `go build -o triangle_app.exe ./cmd/demo/`
 **Module:** `render-engine` | **Platform:** Windows (CGO + GCC + GLFW)
+
+---
+
+## 🚧 Current State & Missing Features
+
+### Engine Features (Partially Done)
+
+**Missing rendering:**
+- Point/spot light shadow maps (only directional has shadows)
+- Skeletal animation / skinned meshes (no bone system)
+- Terrain system (heightmap, LOD chunks)
+- Decals (bullet holes, dirt splats etc.)
+- Volumetric god rays / light shafts
+- Proper cubemap reflections (IBL is sky-approximated, not real reflections)
+- Water shader (ripples, reflections, refraction)
+- LOD (Level of Detail) system
+
+**Missing systems:**
+- Audio (no sound at all)
+- Physics beyond the manual gravity + box collision (no rigidbodies, no mesh collision)
+- Asset hot-reloading
+
+### Simple Game (Nothing Done)
+- No game states (no main menu, no pause screen, no game over)
+- No player interaction (nothing to pick up, open, activate)
+- No objectives or win/lose conditions
+- No NPC characters (no meshes, no AI, no pathfinding)
+- No inventory or item system
+- No score or progression
+
+### Scene Editor (Exists but Unused)
+The `editor/` package has selection, undo/redo, and raycast code but it's completely disconnected from the demo. Nothing works in-engine yet:
+- No click-to-select objects
+- No transform gizmos (move/rotate/scale handles)
+- No property inspector panel
+- No hierarchy view
+- No asset browser
+
+### Polish / Infrastructure
+- No loading screen or splash
+- No settings menu (resolution, graphics quality toggles)
+- No proper triangle-mesh collision (player walks through lamp posts, trees, fountain pillar)
+- Only one hardcoded scene (no scene switching or level loading)
+- Module is named `render-engine` (should be `snorlax-engine` or a proper path)
+
+---
+
+## 🗺️ Roadmap & Priority Order
+
+| Priority | Item | Why |
+|----------|------|-----|
+| **1** | **Game states + main menu** | Makes it feel like a real app |
+| **2** | **Player interaction** | First step toward a game |
+| **3** | **Scene editor wired up** | Click-select + move objects |
+| **4** | **Audio** | Single biggest "missing feature" feeling |
+| **5** | **Proper mesh collision** | Trees/posts are ghost objects |
+| **6** | **NPC / simple AI** | Brings the town alive |
+| **7** | **Skeletal animation** | Needed for characters |
+| **8** | **Terrain** | Opens up large outdoor worlds |
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+To build the engine, you will need:
+- **Go 1.21** or newer
+- **C compiler** (MinGW-w64 or Visual Studio on Windows) for CGO support
+- **GLFW3** development libraries
+
+### Windows Setup
+
+The engine is currently highly optimized for Windows development using MSVC or MinGW.
+
+1. Ensure Go is installed and in your system PATH.
+2. Clone the repository.
+3. Use the provided build script from a developer command prompt:
+
+```batch
+build.bat
+```
+
+> **Note:** Alternatively, you can build directly using Go:
+> ```bash
+> go build ./cmd/demo/...
+> ```
+
+---
+
+## 💻 Usage Example
+
+Creating a basic scene with a rotating 3D object is simple and intuitive:
+
+```go
+package main
+
+import (
+    "render-engine/core"
+    "render-engine/opengl"
+    "render-engine/renderer"
+    "render-engine/scene"
+)
+
+func main() {
+    // 1. Initialize Window
+    window, _ := core.NewWindow(core.DefaultWindowConfig())
+    defer window.Destroy()
+    
+    // 2. Initialize Render Engine
+    backend := opengl.NewBackend()
+    engine, _ := renderer.NewRenderEngine(window, backend)
+    defer engine.Destroy()
+    
+    // 3. Setup Scene & Camera
+    s := scene.NewScene()
+    camera := scene.NewCamera(1.0472, 16.0/9.0, 0.1, 1000.0)
+    s.SetCamera(camera)
+    
+    // 4. Add Objects
+    cube, _ := scene.CreateCube()
+    node := scene.NewNode("MyCube")
+    node.Mesh = cube
+    s.AddNode(node)
+    
+    engine.SetScene(s)
+    
+    // 5. Main Loop
+    for !window.ShouldClose() {
+        window.PollEvents()
+        
+        // Rotate the cube slowly
+        node.Rotate(math.Vec3Up, 0.01)
+        
+        engine.Render()
+    }
+}
+```
+
+---
+
+## 📄 License & Acknowledgments
+
+This project is licensed under the **MIT License**.
+
+- Graphics API bindings via [go-gl/gl](https://github.com/go-gl/gl)
+- Windowing via [go-gl/glfw](https://github.com/go-gl/glfw)
