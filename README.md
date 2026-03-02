@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./Chibilax.png" alt="Snorlax Engine Logo" width="200"/>
+  <img src="./assets/Chibilax.png" alt="Snorlax Engine Logo" width="200"/>
 
   # 🚀 Snorlax Engine
   **A Go-based 3D render engine and game development framework built from scratch.**
