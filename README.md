@@ -143,6 +143,22 @@ func main() {
 
 ## 📂 Project Architecture
 
+The engine is cleanly divided into decoupled packages, ensuring maintainability and extensibility.
+
+```mermaid
+graph TD;
+    ApplicationLayer[Application Layer / Editor] --> SceneGraph[Scene Graph & Cameras]
+    SceneGraph --> Renderer[Renderer & Shaders]
+    Renderer --> Backend[OpenGL 4.1 Backend]
+    Backend --> GLFW[GLFW3 Windowing]
+    
+    Math[Math Library] -.-> SceneGraph
+    Math -.-> Renderer
+    Math -.-> Backend
+```
+
+### Module Breakdown:
+
 ```text
 ├── cmd/demo/          # Runnable application entrypoints (main.go, demo logic)
 ├── internal/opengl/   # Core GPU backend & native GL logic (Go-enforced private)
