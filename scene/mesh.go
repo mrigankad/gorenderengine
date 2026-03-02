@@ -5,6 +5,15 @@ import (
 	"render-engine/math"
 )
 
+// DrawMode controls the OpenGL primitive type used when rendering a mesh.
+type DrawMode int
+
+const (
+	DrawTriangles DrawMode = iota // gl.TRIANGLES (default)
+	DrawLines                     // gl.LINES — pairs of indices form line segments
+	DrawPoints                    // gl.POINTS
+)
+
 // Mesh holds CPU-side vertex/index data.
 // GPU upload is managed by the renderer backend.
 type Mesh struct {
@@ -13,6 +22,14 @@ type Mesh struct {
 	Indices      []uint32
 	IndexCount   uint32
 	MaterialName string
+	DrawMode     DrawMode // defaults to DrawTriangles
+
+	// Cached local-space AABB (computed by CreateMeshFromData).
+	LocalAABB    AABB
+	HasLocalAABB bool
+
+	// Material holds surface shading properties. If nil, DefaultMaterial() is used.
+	Material *Material
 
 	// GPUData is set by the renderer backend (e.g. *opengl.GPUMesh).
 	// Do not access directly; use the renderer's API.
@@ -27,13 +44,35 @@ func NewMesh(name string) *Mesh {
 	}
 }
 
+// CreateMeshFromData builds a Mesh and pre-computes its local-space AABB.
 func CreateMeshFromData(name string, vertices []core.Vertex, indices []uint32) *Mesh {
-	return &Mesh{
+	m := &Mesh{
 		Name:       name,
 		Vertices:   vertices,
 		Indices:    indices,
 		IndexCount: uint32(len(indices)),
 	}
+	if len(vertices) > 0 {
+		m.LocalAABB = computeLocalAABB(vertices)
+		m.HasLocalAABB = true
+	}
+	return m
+}
+
+// computeLocalAABB returns the tight AABB of the given vertex positions.
+func computeLocalAABB(vertices []core.Vertex) AABB {
+	min := vertices[0].Position
+	max := vertices[0].Position
+	for i := 1; i < len(vertices); i++ {
+		p := vertices[i].Position
+		if p.X < min.X { min.X = p.X }
+		if p.Y < min.Y { min.Y = p.Y }
+		if p.Z < min.Z { min.Z = p.Z }
+		if p.X > max.X { max.X = p.X }
+		if p.Y > max.Y { max.Y = p.Y }
+		if p.Z > max.Z { max.Z = p.Z }
+	}
+	return AABB{Min: min, Max: max}
 }
 
 func (m *Mesh) Update(deltaTime float32) {}
